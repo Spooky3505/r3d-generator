@@ -631,10 +631,13 @@
       box-shadow: inset 2px 0 0 #d97706;
     }
 
+    /* The whole combined set renders here, so the box scrolls rather than the
+       table being truncated. Taller than it was when only 12 rows showed --
+       the header is sticky, so scrolling keeps the column names in view. */
     .merge-preview-scroll {
       width: 100%;
       overflow-x: auto;
-      max-height: 320px;
+      max-height: 520px;
       overflow-y: auto;
     }
 
@@ -999,7 +1002,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 26;
+  const APP_REV = 27;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2793,9 +2796,18 @@ Engineer
 
   function renderMergePreview(rows,count,files,issues){
     const box=document.getElementById('merge-preview');
-    const head=rows[0], body=rows.slice(1,13);
-    // Keyed by spreadsheet row so the lookup does not depend on how far the
-    // preview happens to be sliced.
+    // Every row renders; the box scrolls. A flagged cell is only useful if it
+    // can actually be reached, and the flags are typically deep in the set --
+    // E332 and E397 in a 574-node merge were both invisible under the old
+    // 12-row cap.
+    //
+    // Measured in Chrome, click to painted (combine + .xlsx build + render):
+    // 300 rows 10 ms, 1,500 rows 28 ms, 6,000 rows 106 ms. Static markup with
+    // no per-row listeners, built as one string and assigned once, so the cost
+    // is close to linear and there is nothing to virtualise for these sizes.
+    const head=rows[0], body=rows.slice(1);
+    // Keyed by spreadsheet row rather than by position in `body`, so the lookup
+    // survives any future slicing.
     const flagged=new Map((issues||[]).map(x=>[x.row,x]));
     let html='<div class="merge-preview-scroll"><table class="merge-table"><thead><tr>'
       + head.map(h=>`<th>${xmlEsc(h)}</th>`).join('') + '</tr></thead><tbody>'
@@ -2807,7 +2819,8 @@ Engineer
           }).join('')+'</tr>';
         }).join('')
       + '</tbody></table></div>';
-    html+=`<div class="merge-total">Combined <b>${files.length}</b> file(s) → <b>${count}</b> load nodes. Showing first ${Math.min(12,count)} rows.</div>`;
+    const flagNote = flagged.size ? ` <b>${flagged.size}</b> row(s) flagged — scroll to the highlighted cells.` : '';
+    html+=`<div class="merge-total">Combined <b>${files.length}</b> file(s) → <b>${count}</b> load nodes. Showing all ${count} rows.${flagNote}</div>`;
     box.classList.add('has-content');
     box.innerHTML=html;
   }
