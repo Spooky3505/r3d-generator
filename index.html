@@ -490,6 +490,15 @@
       border-radius: 9999px;
     }
 
+    /* A non-numeric load is worse than a zero: the value is passed through to
+       the workbook verbatim, so the cell lands as text where Excel and RISA
+       both expect a number. Distinct colour because the consequence differs. */
+    .warning-chip.severe {
+      background: #fff2f2;
+      border-color: #ffd0d0;
+      color: #c0392b;
+    }
+
     .notional-note {
       padding: 10px 18px;
       border-top: 1px solid var(--divider-soft);
@@ -631,6 +640,22 @@
       box-shadow: inset 2px 0 0 #d97706;
     }
 
+    /* Row-number gutter. The warning chips name cells by spreadsheet reference
+       ("E332"), which is only usable if the row number is on screen -- sticky
+       left so it stays put while the table scrolls sideways. */
+    .merge-table .row-no {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: var(--canvas-parchment);
+      color: var(--ink-muted-48);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      user-select: none;
+    }
+    .merge-table thead .row-no { z-index: 2; }
+    .merge-table tr.has-flag .row-no { color: #92400e; font-weight: 600; }
+
     /* The whole combined set renders here, so the box scrolls rather than the
        table being truncated. Taller than it was when only 12 rows showed --
        the header is sticky, so scrolling keeps the column names in view. */
@@ -750,6 +775,9 @@
     body.dark .merge-file-chip .chip-remove:hover { background: rgba(255,255,255,0.24); }
     body.dark .merge-table th { background: var(--surface-tile-2); color: var(--body-muted); }
     body.dark .merge-table td.cell-flag { background: #2d2000; color: #fbbf24; box-shadow: inset 2px 0 0 #b45309; }
+    body.dark .merge-table .row-no { background: var(--surface-tile-2); }
+    body.dark .merge-table tr.has-flag .row-no { color: #fbbf24; }
+    body.dark .warning-chip.severe { background: #2d0a0a; border-color: #5a1a1a; color: #fca5a5; }
     body.dark .merge-table th, body.dark .merge-table td { border-bottom-color: rgba(255,255,255,0.07); }
     body.dark .merge-total { color: #ffffff; }
 
@@ -1002,7 +1030,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 27;
+  const APP_REV = 28;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2809,11 +2837,16 @@ Engineer
     // Keyed by spreadsheet row rather than by position in `body`, so the lookup
     // survives any future slicing.
     const flagged=new Map((issues||[]).map(x=>[x.row,x]));
+    // The leading gutter carries the spreadsheet row number so the cell
+    // references in the warning chips ("E332") can actually be found. It is
+    // presentation only and never reaches the workbook.
     let html='<div class="merge-preview-scroll"><table class="merge-table"><thead><tr>'
+      + '<th class="row-no"></th>'
       + head.map(h=>`<th>${xmlEsc(h)}</th>`).join('') + '</tr></thead><tbody>'
       + body.map((r,bi)=>{
-          const f=flagged.get(bi+2);
-          return '<tr>'+r.map((c,ci)=>{
+          const rn=bi+2;                       // rows[0] is the header, so body[0] is row 2
+          const f=flagged.get(rn);
+          return `<tr${f?' class="has-flag"':''}><td class="row-no">${rn}</td>`+r.map((c,ci)=>{
             const hit = f && ((ci===4&&f.dead)||(ci===5&&f.live));
             return `<td${hit?' class="cell-flag"':''}>${xmlEsc(c)}</td>`;
           }).join('')+'</tr>';
@@ -2837,16 +2870,32 @@ Engineer
       // wholly blank column would bury the file-level warnings above.
       // Cell references, not identifiers -- the fix happens in the source
       // spreadsheet, so hand over the coordinate to go and type into.
+      // A non-numeric value is reported separately and in red: unlike a zero or
+      // a blank, it is passed through to the workbook verbatim, so the cell
+      // lands as text where Excel and RISA both expect a number. Naming that
+      // consequence is the difference between a warning and a useful one.
       [['dead','Dead load','E'],['live','Live load','F']].forEach(([key,label,col])=>{
         ['zero','blank','non-numeric'].forEach(kind=>{
           const hit=issues.filter(x=>x[key]===kind);
           if(!hit.length) return;
           const refs=hit.map(x=>col+x.row);
           const shown=refs.slice(0,10).join(', ')+(refs.length>10?`, +${refs.length-10} more`:'');
-          warns.push(`⚠ ${hit.length} ${kind} ${label} value${hit.length>1?'s':''} — ${shown}`);
+          const severe = kind==='non-numeric';
+          const tail = severe ? ' (written to the workbook as text, not a number)' : '';
+          warns.push({
+            severe,
+            text:`${severe?'✕':'⚠'} ${hit.length} ${kind} ${label} value${hit.length>1?'s':''} — ${shown}${tail}`
+          });
         });
       });
-      if(warns.length){ warnBox.innerHTML=warns.map(w=>`<div class="warning-chip">${xmlEsc(w)}</div>`).join(''); warnBox.style.display='flex'; }
+      // Entries are either a plain string (file-level notes) or {severe,text}.
+      if(warns.length){
+        warnBox.innerHTML=warns.map(w=>{
+          const {severe=false,text}=(typeof w==='string')?{text:w}:w;
+          return `<div class="warning-chip${severe?' severe':''}">${xmlEsc(text)}</div>`;
+        }).join('');
+        warnBox.style.display='flex';
+      }
       else warnBox.style.display='none';
       document.getElementById('btn-merge-download').classList.add('visible');
     }catch(e){
