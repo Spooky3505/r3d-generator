@@ -1,0 +1,2811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>R3D Generator</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+CiAgPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiByeD0iNSIgZmlsbD0iIzFjMWMxZSIvPgogIDxwYXRoIGQ9Ik0xMiAzIEwyMCA3LjUgTDIwIDE2LjUgTDEyIDIxIEw0IDE2LjUgTDQgNy41IFoiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIxLjYiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICA8cGF0aCBkPSJNMTIgMyBMMTIgMTIgTDIwIDcuNSBNMTIgMTIgTDQgNy41IE0xMiAxMiBMMTIgMjEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIxLjYiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+Cg==">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:        #0066cc;
+      --primary-focus:  #0071e3;
+      --primary-dark:   #2997ff;
+      --ink:            #1d1d1f;
+      --ink-muted-80:   #333333;
+      --ink-muted-48:   #7a7a7a;
+      --body-muted:     #cccccc;
+      --canvas:         #ffffff;
+      --canvas-parchment: #f5f5f7;
+      --surface-pearl:  #fafafc;
+      --surface-black:  #000000;
+      --surface-tile-1: #272729;
+      --surface-tile-2: #2a2a2c;
+      --hairline:       #e0e0e0;
+      --divider-soft:   #f0f0f0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      font-size: 17px;
+      font-weight: 400;
+      line-height: 1.47;
+      letter-spacing: -0.374px;
+      background: var(--canvas-parchment);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ── Global nav ──────────────────────────────────────── */
+    .site-header {
+      background: var(--surface-black);
+      height: 52px;
+      display: flex;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 12px; }
+
+    .logo-mark {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      color: #ffffff;
+      opacity: 0.9;
+    }
+
+    .logo-mark svg { width: 20px; height: 20px; }
+
+    .header-text-row { display: flex; align-items: center; gap: 8px; }
+
+    .header-text h1 {
+      color: #ffffff;
+      font-size: 21px;
+      font-weight: 600;
+      line-height: 1.19;
+      letter-spacing: 0.231px;
+    }
+
+    .header-text p {
+      display: none;
+    }
+
+    .version-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+      color: rgba(255,255,255,0.65);
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 9999px;
+      padding: 2px 9px;
+      line-height: 1.4;
+    }
+
+
+    /* Theme toggle — Apple icon-circular button */
+    .theme-toggle {
+      width: 32px; height: 32px;
+      border-radius: 9999px;
+      border: none;
+      background: rgba(210, 210, 215, 0.2);
+      color: #ffffff;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+      padding: 0;
+      box-shadow: none;
+      flex-shrink: 0;
+    }
+
+    .theme-toggle:hover { background: rgba(210, 210, 215, 0.32); }
+    .theme-toggle:active { transform: scale(0.95); }
+
+    /* ── Main layout ─────────────────────────────────────── */
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+
+    /* ── Page intro ─────────────────────────────────────── */
+    .page-intro {
+      font-size: 17px;
+      font-weight: 400;
+      line-height: 1.47;
+      letter-spacing: -0.374px;
+      color: var(--ink-muted-48);
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    body.dark .page-intro { color: var(--body-muted); }
+
+    /* ── Panels grid ─────────────────────────────────────── */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    /* ── Panel ───────────────────────────────────────────── */
+    .panel {
+      background: var(--canvas);
+      border-radius: 18px;
+      border: 1px solid var(--hairline);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Retain per-panel accent for drop zone hover only */
+    .panel[data-type="dxf"]   { --accent: var(--primary); --accent-bg: #f0f4ff; }
+    .panel[data-type="pinbc"] { --accent: var(--primary); --accent-bg: #f0f4ff; }
+    .panel[data-type="csv"]   { --accent: var(--primary); --accent-bg: #f0f4ff; }
+    .panel[data-type="nos"]   { --accent: var(--primary); --accent-bg: #f0f4ff; }
+
+    .panel-header {
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--divider-soft);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-badge {
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: -0.08px;
+      color: var(--ink-muted-48);
+      background: var(--canvas-parchment);
+      padding: 2px 7px;
+      border-radius: 9999px;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.224px;
+      color: var(--ink);
+    }
+
+    .panel-optional {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--ink-muted-48);
+      font-weight: 400;
+      letter-spacing: -0.12px;
+    }
+
+    .panel-body {
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    /* ── Drop zone ───────────────────────────────────────── */
+    .drop-zone {
+      border: 1.5px dashed var(--hairline);
+      border-radius: 11px;
+      padding: 22px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
+      background: var(--canvas-parchment);
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--primary);
+      background: #eef4ff;
+    }
+
+    .drop-zone.loaded {
+      border-color: #34c759;
+      background: #f4fff7;
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+
+    .drop-icon { font-size: 1.5rem; margin-bottom: 6px; }
+
+    .drop-label { font-size: 14px; color: var(--ink-muted-48); letter-spacing: -0.224px; }
+
+    .drop-label span {
+      color: var(--primary);
+      font-weight: 400;
+    }
+
+    .drop-hint {
+      font-size: 12px;
+      color: var(--ink-muted-48);
+      margin-top: 3px;
+      letter-spacing: -0.12px;
+    }
+
+    /* ── File status ─────────────────────────────────────── */
+    .file-status {
+      font-size: 14px;
+      color: #1c8f3a;
+      font-weight: 400;
+      letter-spacing: -0.224px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .file-status.visible { display: flex; }
+
+    .file-status .checkmark {
+      width: 16px; height: 16px;
+      background: #34c759;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-size: 0.6rem;
+      flex-shrink: 0;
+    }
+
+    .btn-clear {
+      margin-left: auto;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: -0.12px;
+      background: var(--canvas-parchment);
+      color: var(--ink-muted-48);
+      border-radius: 9999px;
+      cursor: pointer;
+      border: 1px solid var(--hairline);
+      transition: background 0.15s;
+    }
+
+    .btn-clear:hover { background: var(--hairline); }
+    .btn-clear:active { transform: scale(0.95); }
+
+    /* ── Preview ─────────────────────────────────────────── */
+    .preview-label {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--ink-muted-48);
+      letter-spacing: -0.12px;
+    }
+
+    .preview-box {
+      background: var(--canvas-parchment);
+      border: 1px solid var(--divider-soft);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 100px;
+      font-size: 14px;
+      color: var(--ink-muted-48);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .preview-box.has-content {
+      align-items: flex-start;
+      justify-content: flex-start;
+    }
+
+    /* ── Entity list ─────────────────────────────────────── */
+    .entity-list { width: 100%; }
+
+    .entity-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--divider-soft);
+    }
+
+    .entity-row:last-child { border-bottom: none; }
+
+    .entity-name {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--ink);
+      letter-spacing: -0.224px;
+    }
+
+    .entity-count {
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.224px;
+      padding: 2px 10px;
+      border-radius: 9999px;
+      background: var(--canvas-parchment);
+      color: var(--primary);
+      border: 1px solid var(--hairline);
+    }
+
+    /* ── Actions ─────────────────────────────────────────── */
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+    }
+
+    button {
+      padding: 11px 22px;
+      font-size: 17px;
+      font-weight: 400;
+      letter-spacing: -0.374px;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+    }
+
+    button:active { transform: scale(0.95); }
+
+    #btn-generate {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    #btn-generate:hover:not(:disabled) {
+      background: var(--primary-focus);
+    }
+
+    #btn-generate:disabled {
+      background: var(--hairline);
+      color: var(--ink-muted-48);
+      cursor: not-allowed;
+    }
+
+    #btn-download {
+      background: var(--primary);
+      color: #ffffff;
+      display: none;
+    }
+
+    #btn-download:hover { background: var(--primary-focus); }
+    #btn-download.visible { display: block; }
+
+    #btn-download-unconnected {
+      background: transparent;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      display: none;
+    }
+
+    #btn-download-unconnected:hover { background: var(--primary); color: #ffffff; }
+    #btn-download-unconnected.visible { display: block; }
+
+    /* ── Summary card ────────────────────────────────────── */
+    .summary-card {
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      overflow: hidden;
+      display: none;
+      margin-bottom: 16px;
+    }
+
+    .summary-card.visible { display: block; }
+
+    .summary-header {
+      background: var(--ink);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .summary-header .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #34c759;
+      flex-shrink: 0;
+    }
+
+    .summary-header span {
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.224px;
+    }
+
+    .summary-stats {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+    }
+
+    .stat-box {
+      padding: 18px 10px;
+      text-align: center;
+      border-right: 1px solid var(--divider-soft);
+    }
+
+    .stat-box:last-child { border-right: none; }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.28px;
+      line-height: 1.07;
+      margin-bottom: 6px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--ink-muted-48);
+      letter-spacing: -0.12px;
+      font-weight: 400;
+    }
+
+    .warnings-area {
+      padding: 10px 18px;
+      border-top: 1px solid var(--divider-soft);
+      background: #fffbeb;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .warning-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #fef3c7;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: -0.224px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+    }
+
+    .notional-note {
+      padding: 10px 18px;
+      border-top: 1px solid var(--divider-soft);
+      background: var(--canvas-parchment);
+      font-size: 14px;
+      color: var(--ink-muted-48);
+      letter-spacing: -0.224px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── Error bar ───────────────────────────────────────── */
+    .error-bar {
+      background: #fff2f2;
+      border: 1px solid #ffd0d0;
+      border-radius: 11px;
+      padding: 11px 18px;
+      font-size: 14px;
+      color: #c0392b;
+      letter-spacing: -0.224px;
+      display: none;
+      margin-bottom: 16px;
+    }
+
+    .error-bar.visible { display: block; }
+
+    /* ── Combine Load Files section ──────────────────────── */
+    .merge-section {
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      padding: 18px 20px 20px;
+      margin-bottom: 20px;
+    }
+
+    .merge-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .merge-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.24px;
+      color: var(--ink);
+    }
+
+    .merge-sub {
+      font-size: 13px;
+      color: var(--ink-muted-48);
+      letter-spacing: -0.13px;
+      margin-top: 2px;
+    }
+
+    .merge-filelist {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .merge-filelist:empty { display: none; }
+
+    .merge-file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--canvas-parchment);
+      border: 1px solid var(--hairline);
+      border-radius: 9999px;
+      padding: 5px 8px 5px 12px;
+      font-size: 13px;
+      letter-spacing: -0.13px;
+      color: var(--ink);
+    }
+
+    .merge-file-chip.invalid {
+      background: #fff2f2;
+      border-color: #ffd0d0;
+      color: #c0392b;
+    }
+
+    .merge-file-chip .chip-count {
+      font-variant-numeric: tabular-nums;
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .merge-file-chip .chip-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: var(--hairline);
+      color: var(--ink-muted-48);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+    }
+
+    .merge-file-chip .chip-remove:hover { background: #d8d8d8; }
+
+    .merge-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .merge-table th, .merge-table td {
+      text-align: left;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--divider-soft);
+      white-space: nowrap;
+    }
+
+    .merge-table th {
+      color: var(--ink-muted-48);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      background: var(--canvas-parchment);
+    }
+
+    .merge-preview-scroll {
+      width: 100%;
+      overflow-x: auto;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .merge-total {
+      font-size: 13px;
+      color: var(--ink);
+      margin-top: 10px;
+      letter-spacing: -0.13px;
+    }
+
+    .merge-total b { color: var(--primary); font-variant-numeric: tabular-nums; }
+
+    #btn-merge {
+      background: var(--primary);
+      color: #ffffff;
+    }
+    #btn-merge:hover:not(:disabled) { background: var(--primary-focus); }
+    #btn-merge:disabled {
+      background: var(--hairline);
+      color: var(--ink-muted-48);
+      cursor: not-allowed;
+    }
+
+    #btn-merge-download {
+      background: var(--primary);
+      color: #ffffff;
+      display: none;
+    }
+    #btn-merge-download:hover { background: var(--primary-focus); }
+    #btn-merge-download.visible { display: block; }
+
+    /* ── Dark mode ───────────────────────────────────────── */
+    body.dark {
+      background: var(--ink);
+      color: #ffffff;
+    }
+
+    body.dark .panel {
+      background: var(--surface-tile-1);
+      border-color: rgba(255,255,255,0.1);
+    }
+
+    body.dark .panel-header {
+      border-bottom-color: rgba(255,255,255,0.07);
+    }
+
+    body.dark .panel-title { color: #ffffff; }
+    body.dark .panel-optional { color: var(--body-muted); }
+
+    body.dark .step-badge {
+      background: var(--surface-tile-2);
+      color: var(--body-muted);
+    }
+
+    body.dark .drop-zone {
+      background: var(--ink);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    body.dark .drop-zone:hover,
+    body.dark .drop-zone.dragover {
+      background: #0a1a2e;
+      border-color: var(--primary-dark);
+    }
+
+    body.dark .drop-zone.loaded {
+      background: #0a1f10;
+      border-color: #34c759;
+    }
+
+    body.dark .drop-label { color: var(--body-muted); }
+    body.dark .drop-hint  { color: rgba(255,255,255,0.3); }
+
+    body.dark .preview-box {
+      background: var(--ink);
+      border-color: rgba(255,255,255,0.07);
+      color: var(--body-muted);
+    }
+
+    body.dark .preview-label { color: var(--body-muted); }
+
+    body.dark .entity-name { color: #ffffff; }
+    body.dark .entity-count {
+      background: var(--surface-tile-2);
+      color: var(--primary-dark);
+      border-color: rgba(255,255,255,0.1);
+    }
+    body.dark .entity-row { border-bottom-color: rgba(255,255,255,0.07); }
+
+    body.dark .summary-card {
+      background: var(--surface-tile-1);
+      border-color: rgba(255,255,255,0.1);
+    }
+
+    body.dark .summary-header { background: var(--surface-black); }
+
+    body.dark .stat-box { border-right-color: rgba(255,255,255,0.07); }
+    body.dark .stat-value { color: #ffffff; }
+    body.dark .stat-label { color: var(--body-muted); }
+
+    body.dark .warnings-area { background: #1a1200; border-top-color: rgba(255,255,255,0.07); }
+    body.dark .warning-chip { background: #2d2000; border-color: #4a3600; color: #fbbf24; }
+
+    body.dark .merge-section { background: var(--surface-tile-1); border-color: rgba(255,255,255,0.1); }
+    body.dark .merge-title { color: #ffffff; }
+    body.dark .merge-sub { color: var(--body-muted); }
+    body.dark .merge-file-chip { background: var(--surface-tile-2); border-color: rgba(255,255,255,0.12); color: #ffffff; }
+    body.dark .merge-file-chip.invalid { background: #2a1414; border-color: #5a2020; color: #ff6b6b; }
+    body.dark .merge-file-chip .chip-remove { background: rgba(255,255,255,0.14); color: var(--body-muted); }
+    body.dark .merge-file-chip .chip-remove:hover { background: rgba(255,255,255,0.24); }
+    body.dark .merge-table th { background: var(--surface-tile-2); color: var(--body-muted); }
+    body.dark .merge-table th, body.dark .merge-table td { border-bottom-color: rgba(255,255,255,0.07); }
+    body.dark .merge-total { color: #ffffff; }
+
+    body.dark .notional-note {
+      background: var(--surface-tile-2);
+      border-top-color: rgba(255,255,255,0.07);
+      color: var(--body-muted);
+    }
+
+    body.dark .error-bar { background: #2d0f0f; border-color: #4a1515; color: #f87171; }
+
+    body.dark #btn-generate:disabled {
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.3);
+    }
+
+    body.dark .btn-clear {
+      background: var(--surface-tile-2);
+      border-color: rgba(255,255,255,0.1);
+      color: var(--body-muted);
+    }
+
+    body.dark .btn-clear:hover { background: rgba(255,255,255,0.1); }
+
+    /* ── Responsive ──────────────────────────────────────── */
+    @media (max-width: 760px) {
+      .panels { grid-template-columns: 1fr; }
+      .summary-stats { grid-template-columns: repeat(3, 1fr); }
+      .summary-stats .stat-box:nth-child(3) { border-right: none; }
+      .main { padding: 20px 16px 48px; }
+      button { font-size: 15px; padding: 10px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 2L17.32 6.5V15.5L10 20L2.68 15.5V6.5L10 2Z" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M5 8.5L10 11.5L15 8.5" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="10" y1="11.5" x2="10" y2="17.5" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="header-text">
+        <div class="header-text-row">
+          <h1>R3D Generator</h1>
+          <span class="version-badge" id="version-badge"></span>
+        </div>
+        <p>Load DXF geometry, boundary conditions, and load CSV files to generate a RISA 3D model.</p>
+      </div>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle dark / light mode">
+      <span class="theme-icon" id="theme-icon">☀</span>
+    </button>
+  </div>
+</header>
+
+<div class="main">
+
+  <p class="page-intro">Load any combination of files below — each input is optional on its own. You can upload a single file and generate a valid R3D model from it alone, or combine multiple inputs for a more complete result.</p>
+
+  <div class="panels">
+
+    <!-- Panel 1: HSS DXF -->
+    <div class="panel" data-type="dxf">
+      <div class="panel-header">
+        <span class="step-badge">01</span>
+        <span class="panel-title">DXF File — Geometry</span>
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="dxf-zone">
+          <input type="file" id="dxf-input" accept=".dxf">
+          <div class="drop-icon">📐</div>
+          <div class="drop-label">Drop file here or <span>browse</span></div>
+          <div class="drop-hint">Accepted: .dxf</div>
+        </div>
+        <div class="file-status" id="dxf-status">
+          <div class="checkmark">✔</div>
+          <span id="dxf-filename"></span>
+          <button class="btn-clear" id="dxf-clear">Clear</button>
+        </div>
+        <div class="preview-label">Member Summary</div>
+        <div class="preview-box" id="dxf-preview"><span>No file loaded.</span></div>
+      </div>
+    </div>
+
+    <!-- Panel 2: Pin BC DXF -->
+    <div class="panel" data-type="pinbc">
+      <div class="panel-header">
+        <span class="step-badge">02</span>
+        <span class="panel-title">Pin BC DXF — Boundary Conditions</span>
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="pinbc-zone">
+          <input type="file" id="pinbc-input" accept=".dxf">
+          <div class="drop-icon">📍</div>
+          <div class="drop-label">Drop file here or <span>browse</span></div>
+          <div class="drop-hint">Accepted: .dxf</div>
+        </div>
+        <div class="file-status" id="pinbc-status">
+          <div class="checkmark">✔</div>
+          <span id="pinbc-filename"></span>
+          <button class="btn-clear" id="pinbc-clear">Clear</button>
+        </div>
+        <div class="preview-label">Node Count</div>
+        <div class="preview-box" id="pinbc-preview"><span>No file loaded.</span></div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Matched Load CSV -->
+    <div class="panel" data-type="csv">
+      <div class="panel-header">
+        <span class="step-badge">03</span>
+        <span class="panel-title">Matched Load CSV</span>
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="csv-zone">
+          <input type="file" id="csv-input" accept=".csv">
+          <div class="drop-icon">📊</div>
+          <div class="drop-label">Drop file here or <span>browse</span></div>
+          <div class="drop-hint">Accepted: .csv</div>
+        </div>
+        <div class="file-status" id="csv-status">
+          <div class="checkmark">✔</div>
+          <span id="csv-filename"></span>
+          <button class="btn-clear" id="csv-clear">Clear</button>
+        </div>
+        <div class="preview-label">Load Summary</div>
+        <div class="preview-box" id="csv-preview"><span>No file loaded.</span></div>
+      </div>
+    </div>
+
+    <!-- Panel 4: Notional Loads CSV -->
+    <div class="panel" data-type="nos">
+      <div class="panel-header">
+        <span class="step-badge">04</span>
+        <span class="panel-title">Notional Loads — all NOs.csv</span>
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="nos-zone">
+          <input type="file" id="nos-input" accept=".csv">
+          <div class="drop-icon">🧭</div>
+          <div class="drop-label">Drop file here or <span>browse</span></div>
+          <div class="drop-hint">Accepted: .csv</div>
+        </div>
+        <div class="file-status" id="nos-status">
+          <div class="checkmark">✔</div>
+          <span id="nos-filename"></span>
+          <button class="btn-clear" id="nos-clear">Clear</button>
+        </div>
+        <div class="preview-label">Node Count by Case</div>
+        <div class="preview-box" id="nos-preview"><span>No file loaded.</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Combine Load Files (merge multiple per-structure exports into one workbook) -->
+  <div class="merge-section" id="merge-section">
+    <div class="merge-header">
+      <span class="step-badge">＋</span>
+      <div>
+        <div class="merge-title">Combine Load Files</div>
+        <div class="merge-sub">Drop multiple per-structure load exports (.xlsx, .xls, .csv) to merge them into one combined “All Loads” workbook.</div>
+      </div>
+    </div>
+
+    <div class="drop-zone" id="merge-zone">
+      <input type="file" id="merge-input" accept=".xlsx,.xls,.csv" multiple>
+      <div class="drop-icon">🗂️</div>
+      <div class="drop-label">Drop files here or <span>browse</span></div>
+      <div class="drop-hint">Accepted: .xlsx, .xls, .csv — multiple files</div>
+    </div>
+
+    <div class="merge-filelist" id="merge-filelist"></div>
+
+    <div class="preview-label">Combined Preview</div>
+    <div class="preview-box" id="merge-preview"><span>No files loaded.</span></div>
+
+    <div class="warnings-area" id="merge-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
+
+    <div class="actions" style="margin-top:16px; margin-bottom:0;">
+      <button id="btn-merge" disabled>Combine Files</button>
+      <button id="btn-merge-download">Download All Loads.xlsx</button>
+    </div>
+  </div>
+
+  <!-- Model summary card (shown after generation) -->
+  <div class="summary-card" id="summary-card">
+    <div class="summary-header">
+      <div class="dot"></div>
+      <span>Model Generated</span>
+    </div>
+    <div class="summary-stats">
+      <div class="stat-box">
+        <div class="stat-value" id="stat-joints">—</div>
+        <div class="stat-label">Joint Nodes</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-members">—</div>
+        <div class="stat-label">HSS Members</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-loadnodes">—</div>
+        <div class="stat-label">Load Nodes</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-bcs">—</div>
+        <div class="stat-label">Boundaries</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-loads">—</div>
+        <div class="stat-label">Loads</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-notional">—</div>
+        <div class="stat-label">Notional</div>
+      </div>
+    </div>
+    <div class="warnings-area" id="warnings-area" style="display:none"></div>
+    <div class="notional-note" id="pin-match-note" style="display:none"></div>
+    <div class="notional-note" id="dup-pin-note" style="display:none"></div>
+    <div class="notional-note" id="merged-nodes-note" style="display:none"></div>
+    <div class="notional-note" id="zero-load-note" style="display:none"></div>
+    <div class="notional-note" id="notional-note" style="display:none">
+      ℹ Notional load magnitudes are set to 0 — update values in RISA after import.
+    </div>
+  </div>
+
+  <div class="error-bar" id="error-bar"></div>
+
+  <div class="actions">
+    <button id="btn-generate" disabled>Generate R3D File</button>
+    <button id="btn-download">Download output.r3d</button>
+    <button id="btn-download-unconnected" title="A DXF marking every Pin BC point that got a standalone node instead of connecting to real HSS/Load geometry, for review in AutoCAD">Download Unconnected Pins DXF</button>
+  </div>
+
+</div>
+
+<script>
+  // ---------------------------------------------------------------------------
+  // Static R3D template sections (verbatim from Final Risa File.r3d)
+  // ---------------------------------------------------------------------------
+
+  // === CORE-START === (tools/harness.mjs extracts between these markers to run
+  // generate() headlessly in Node — keep them around the whole conversion core.)
+
+  // Single source of truth for the revision badge. Bump this only; the header
+  // pill is written from it at load, so the number can't drift or be reused.
+  const APP_REV = 25;
+
+  const R3D_HEADER = `[RISA-3D_INPUT_DATA]
+
+
+[VERSION_NUMBER] <1>
+23.00003;
+[END_VERSION_NUMBER]
+
+
+[PROGRAM_INFO] <1>
+64;
+[END_PROGRAM_INFO]
+
+
+[DATA_INTEGRITY_KEY] <1>
+6551157240174700000000;
+[END_DATA_INTEGRITY_KEY]
+
+
+[OS_VERSION] <1>
+Microsoft Windows NT 10.0.26100.0
+[END_OS_VERSION]
+
+
+[UNITS] <1>
+0 0 0 0 1 0 0 0 0 0 0 0 0 0;
+[END_UNITS]
+
+
+[GLOBAL_PARAMETERS]
+
+[.PROJECT_DESCRIPTION]
+
+[..COMPANY_NAME] <1>
+<Licensed Company>
+[..END_COMPANY_NAME]
+
+[..DESIGNER_NAME] <1>
+Engineer
+[..END_DESIGNER_NAME]
+
+[.END_PROJECT_DESCRIPTION]
+
+[.SOLUTION_PARAMETERS] <1>
+0.005000 144.000000 6 5 1 1 3 0.120000 1 32.200000 1 24.000000 0 1 1 1 3 1 1 1 0;
+[.END_SOLUTION_PARAMETERS]
+
+[.DESIGN_CODES] <1>
+408 5000 10 0 21 1 14 0 9 0 0 408 1 0 0 1 1 1 1 0 1 1 0 9000;
+[.END_DESIGN_CODES]
+
+[.WIND_PARAMETERS] <1>
+12 115.000000 2 1 0.000000 0.000000 0.000000 0.850000 14 -999999.000000 1 0 0.900000 0.020000 0.850000 1.000000;
+
+[..IS_WIND_PARAMETERS] <1>
+47.000000 2 2 1.000000 1.000000 1.200000 1.200000 1 1 0.010000 0.010000 1.000000 1.000000;
+[..END_IS_WIND_PARAMETERS]
+
+[..MEXI_WIND_PARAMETERS] <1>
+0 0 0 0 0 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0 0.280000;
+[..END_MEXI_WIND_PARAMETERS]
+
+[..NBC_2005_WIND_PARAMETERS] <1>
+1 0 0.000000 0.015000 0.100000 0.000000 0.000000 0 1 1.000000;
+[..END_NBC_2005_WIND_PARAMETERS]
+
+[.END_WIND_PARAMETERS]
+
+[.SEISMIC_PARAMETERS] <1>
+13 0.020000 0.020000 -1.000000 -1.000000 3.000000 3.000000 3 3 1.000000 0 0.540000 0.360000 1.000000 1.000000 1.000000 -1 20 -999999.000000 1 5.000000 0.750000 0.750000 0.540000 0.360000 1.000000 1.000000 1.000000 1.000000 3 4.000000 4.000000 1 2;
+
+[..MULTI_PERIOD_SPECTRUM] <22>
+0.000000 0.510000;
+0.010000 0.520000;
+0.020000 0.490000;
+0.030000 0.460000;
+0.050000 0.490000;
+0.075000 0.610000;
+0.100000 0.710000;
+0.150000 0.820000;
+0.200000 0.890000;
+0.250000 0.930000;
+0.300000 1.020000;
+0.400000 1.150000;
+0.500000 1.310000;
+0.750000 1.520000;
+1.000000 1.640000;
+1.500000 1.660000;
+2.000000 1.710000;
+3.000000 1.340000;
+4.000000 0.980000;
+5.000000 0.750000;
+7.500000 0.380000;
+10.000000 0.220000;
+[..END_MULTI_PERIOD_SPECTRUM]
+
+[..SEISMIC_DETAILING] <1>
+1.000000 1.000000 1.000000 1.000000 0;
+[..END_SEISMIC_DETAILING]
+
+[..IS_SEISMIC_PARAMETERS] <1>
+0.075000 0.075000 -1.000000 -1.000000 4.000000 4.000000 2 1 1.000000 5.000000;
+[..END_IS_SEISMIC_PARAMETERS]
+
+[..MEXICAN_SEISMIC_PARAMETERS] <1>
+-1.000000 -1.000000 2 2 0 0 2 0;
+[..END_MEXICAN_SEISMIC_PARAMETERS]
+
+[..NBC_2005_SEISMIC_PARAMETERS] <1>
+1 2 0 0.000000 0.000000 0.240000 0.600000 0.600000 0.340000 3.500000 1.500000 0.000000 0.000000 0.000000;
+[..END_NBC_2005_SEISMIC_PARAMETERS]
+
+[.END_SEISMIC_PARAMETERS]
+
+[.NOTIONALLoad_PARAMETERS] <1>
+0.010000, 0.010000, -1, 12, -1, -1, -1, 0.000000, 0, 1;
+[.END_NOTIONALLoad_PARAMETERS]
+
+[.CONCRETE_PARAMETERS] <1>
+0 1 4.000000 2.000000 4 1 1 2 0.650000 0 8.000000 1 1.000000 1 0 1;
+[.END_CONCRETE_PARAMETERS]
+
+[.FOOTING_PARAMETERS] <1>
+0.000000 0.000000 3644.000000 0.000000 0.001800 0.007500 0.000000 0.000000 0.000000 0.000000 3 3 3 1 1 1 0.000000;
+[.END_FOOTING_PARAMETERS]
+
+[.LC_GENERATOR_RLL_OPTIONS] <1>
+1 0 0;
+[.END_LC_GENERATOR_RLL_OPTIONS]
+
+[END_GLOBAL_PARAMETERS]
+
+
+[LABEL_LENGTHS] <1>
+32 32 32 32 32 32 32 32 32 32 32 32 32 79 200 200 32 32 36 32 10 32 32 32;
+[END_LABEL_LENGTHS]
+
+
+[MATERIAL_PROPERTIES]
+
+[.GENERAL_MATERIAL] <9>
+"gen_Conc3NW                     " 3155.000000 1372.000000 0.150000 0.600000 0.145000 -1 0 0;
+"gen_Conc4NW                     " 3644.000000 1584.000000 0.150000 0.600000 0.145000 -1 0 0;
+"gen_Conc3LW                     " 2085.000000 906.000000 0.150000 0.600000 0.109999 -1 0 0;
+"gen_Conc4LW                     " 2408.000000 1047.000000 0.150000 0.600000 0.109999 -1 0 0;
+"gen_Alum                        " 10100.000000 4077.000000 0.300000 1.290000 0.173000 -1 0 0;
+"gen_Steel                       " 29000.000000 11154.000000 0.300000 0.650000 0.490000 -1 0 0;
+"gen_Plywood                     " 1800.000000 38.000000 0.000000 0.300000 0.035000 -1 0 0;
+"RIGID                           " 1000000.000000 0.000000 0.300000 0.000000 0.000000 -1 0 0;
+"gen_Ortho                       " 29000.000000 11154.000000 0.300000 0.650000 0.490000 -1 1 0;
+[.END_GENERAL_MATERIAL]
+
+[.ORTHOTROPIC_MATERIAL] <1>
+"gen_Ortho                       " 29000.000000 14500.000000 11154.000000 11154.000000 11154.000000 0.300000 0.650000 0.490000 -1;
+[.END_ORTHOTROPIC_MATERIAL]
+
+[.HR_STEEL_MATERIAL] <12>
+"A992                            " 29000.000000 11154.000000 0.300000 0.650000 0.490000 50.000000 -1 1.100000 65.000000 1.100000;
+"A36 Gr.36                       " 29000.000000 11154.000000 0.300000 0.650000 0.490000 36.000000 -1 1.500000 58.000000 1.200000;
+"A572 Gr.50                      " 29000.000000 11154.000000 0.300000 0.650000 0.490000 50.000000 -1 1.100000 65.000000 1.100000;
+"A500 Gr.B                       " 29000.000000 11154.000000 0.300000 0.650000 0.527000 46.000000 -1 1.400000 58.000000 1.300000;
+"A500 Gr.C                       " 29000.000000 11154.000000 0.300000 0.650000 0.527000 50.000000 -1 1.400000 62.000000 1.300000;
+"A53 Gr.B                        " 29000.000000 11154.000000 0.300000 0.650000 0.490000 35.000000 -1 1.600000 60.000000 1.200000;
+"A1085                           " 29000.000000 11154.000000 0.300000 0.650000 0.490000 50.000000 -1 1.400000 65.000000 1.300000;
+"A913 Gr.65                      " 29000.000000 11154.000000 0.300000 0.650000 0.490000 65.000000 -1 1.100000 80.000000 1.100000;
+"A500 Gr.B RND                   " 29000.000000 11154.000000 0.300000 0.650000 0.527000 42.000000 -1 1.400000 58.000000 1.300000;
+"A500 Gr.B RECT                  " 29000.000000 11154.000000 0.300000 0.650000 0.527000 46.000000 -1 1.400000 58.000000 1.300000;
+"A500 Gr.C RND                   " 29000.000000 11154.000000 0.300000 0.650000 0.527000 46.000000 -1 1.400000 62.000000 1.300000;
+"A500 Gr.C RECT                  " 29000.000000 11154.000000 0.300000 0.650000 0.527000 50.000000 -1 1.400000 62.000000 1.300000;
+[.END_HR_STEEL_MATERIAL]
+
+[.CF_STEEL_MATERIAL] <2>
+"A653 SS Gr33                    " 29500.000000 11346.000000 0.300000 0.650000 0.490000 33.000000 45.000000 -1;
+"A653 SS Gr50/1                  " 29500.000000 11346.000000 0.300000 0.650000 0.490000 50.000000 65.000000 -1;
+[.END_CF_STEEL_MATERIAL]
+
+[.ALUMINUM_MATERIAL] <6>
+"3003-H14                        " 10100.000000 3787.500000 0.330000 1.300000 0.172800 0 1.000000  19.000000 16.000000 13.000000 12.000000 141.000000 -1;
+"6061-T6                         " 10100.000000 3787.500000 0.330000 1.300000 0.172800 1 1.000000  38.000000 35.000000 35.000000 24.000000 141.000000 -1;
+"6063-T5                         " 10100.000000 3787.500000 0.330000 1.300000 0.172800 1 1.000000  22.000000 16.000000 16.000000 13.000000 141.000000 -1;
+"6063-T6                         " 10100.000000 3787.500000 0.330000 1.300000 0.172800 1 1.000000  30.000000 25.000000 25.000000 19.000000 141.000000 -1;
+"5052-H34                        " 10200.000000 3787.500000 0.330000 1.300000 0.172800 0 1.000000  34.000000 26.000000 24.000000 20.000000 141.000000 -1;
+"6061-T6 W                       " 10100.000000 3787.500000 0.330000 1.300000 0.172800 0 1.000000  24.000000 15.000000 15.000000 15.000000 141.000000 -1;
+[.END_ALUMINUM_MATERIAL]
+
+[.WOOD_MATERIAL] <24>
+"DF                              " "Douglas Fir-Larch               " 0 6 2 0 1.000000 0.300000 0.300000 0.035001 0 -1 0 0 "Visually Graded                 ";
+"SP                              " "Southern Pine                   " 0 31 2 0 1.000000 0.300000 0.300000 0.035001 0 -1 0 0 "Visually Graded                 ";
+"HF                              " "Hem-Fir                         " 0 15 2 0 1.000000 0.300000 0.300000 0.035001 0 -1 0 0 "Visually Graded                 ";
+"SPF                             " "Spruce-Pine-fir                 " 0 32 2 0 1.000000 0.300000 0.300000 0.035001 0 -1 0 0 "Visually Graded                 ";
+"24F-1.8E DF Balanced            " "24F-1.8E_DF_BAL                 " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E DF Unbalanced          " "24F-1.8E_DF_UNBAL               " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E SP Balanced            " "24F-1.8E_SP_BAL                 " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E SP Unbalanced          " "24F-1.8E_SP_UNBAL               " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"1.3E-1600F_VERSALAM             " "1.3E-1600F_VERSALAM             " 0 1 1 0 1.000000 0.300000 0.300000 0.035001 0 -1 2 0 "Boise Cascade                   ";
+"1.35E LSL_SolidStart            " "1.35E LSL_SolidStart            " 0 1 1 0 1.000000 0.300000 0.300000 0.035001 0 -1 2 0 "Louisiana Pacific               ";
+"1.4E_RIGIDLAM LVL               " "1.4E_RIGIDLAM LVL               " 0 1 1 0 1.000000 0.300000 0.300000 0.035001 0 -1 2 0 "Roseburg Forest Products_2023   ";
+"2.0E_DF Parallam PSL            " "2.0E_DF Parallam PSL            " 0 1 1 0 1.000000 0.300000 0.300000 0.035001 0 -1 2 0 "TrusJoist                       ";
+"LVL_PRL_1.5E_2250F              " "LVL_PRL_1.5E_2250F              " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 0 -1 3 0 "N/A                             ";
+"LVL_Microlam_1.9E_2600F         " "LVL_Microllam_1.9E_2600F        " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 3 0 "N/A                             ";
+"PSL_Parallam_2.0E_2900F         " "PSL_Parallam_2.0E_2900F         " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 3 0 "N/A                             ";
+"LSL_TimberStrand_1.55E_2325F    " "LSL_TimberStrand_1.55E_2325F    " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 3 0 "N/A                             ";
+"24F-1.8E DF Balanced_2          " "24F-1.8E_DF_BAL                 " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E DF Unbalanced_2        " "24F-1.8E_DF_UNBAL               " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E SP Balanced_2          " "24F-1.8E_SP_BAL                 " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E SP Unbalanced_2        " "24F-1.8E_SP_UNBAL               " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E DF Balanced_1          " "24F-1.8E_DF_BAL                 " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E DF Unbalanced_1        " "24F-1.8E_DF_UNBAL               " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E SP Balanced_1          " "24F-1.8E_SP_BAL                 " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+"24F-1.8E SP Unbalanced_1        " "24F-1.8E_SP_UNBAL               " 1 1 1 0 1.000000 0.300000 0.300000 0.035001 1 -1 1 0 "Table 5A                        ";
+
+[..CUSTOM_WOOD_PROPERTIES] <4>
+"LVL_PRL_1.5E_2250F              " 2.25 1.5 0.22 1.95 0 1500 1 0.5 -1 4 0.5;
+"LVL_Microllam_1.9E_2600F        " 2.6 1.555 0.285 2.51 0 1900 1 0.5 -1 4 0.5;
+"PSL_Parallam_2.0E_2900F         " 2.9 2.025 0.29 2.9 0 2000 1 0.5 -1 4 0.5;
+"LSL_TimberStrand_1.55E_2325F    " 2.325 1.07 0.31 2.05 0 1550 1 0.5 -1 4 0.5;
+[..END_CUSTOM_WOOD_PROPERTIES]
+
+[.END_WOOD_MATERIAL]
+
+[.CONCRETE_MATERIAL] <9>
+"Conc3000NW                      " 3156.000000 1372.000000 0.150000 0.600000 0.145000 3.000000 -1 1.000000 60.000000 60.000000;
+"Conc3500NW                      " 3409.000000 1482.000000 0.150000 0.600000 0.145000 3.500000 -1 1.000000 60.000000 60.000000;
+"Conc4000NW                      " 3644.000000 1584.000000 0.150000 0.600000 0.145000 4.000000 -1 1.000000 60.000000 60.000000;
+"Conc3000LW                      " 2085.000000 907.000000 0.150000 0.600000 0.109999 3.000000 -1 0.750000 60.000000 60.000000;
+"Conc3500LW                      " 2252.000000 979.000000 0.150000 0.600000 0.109999 3.500000 -1 0.750000 60.000000 60.000000;
+"Conc4000LW                      " 2408.000000 1047.000000 0.150000 0.600000 0.109999 4.000000 -1 0.750000 60.000000 60.000000;
+"Conc3000NW WWR                  " 3156.000000 1372.000000 0.150000 0.600000 0.145000 3.000000 -1 1.000000 70.000000 60.000000;
+"Conc3500NW WWR                  " 3409.000000 1482.000000 0.150000 0.600000 0.145000 3.500000 -1 1.000000 70.000000 60.000000;
+"Conc4000NW WWR                  " 3644.000000 1584.000000 0.150000 0.600000 0.145000 4.000000 -1 1.000000 70.000000 60.000000;
+[.END_CONCRETE_MATERIAL]
+
+[.MASONRY_MATERIAL] <3>
+"Concrete Matl                   " 1350.000000 540.000000 0.250000 0.600000 0.079999 2.000000 -1 2 2 1 60.000000 60.000000;
+"Clay Matl                       " 1050.000000 420.000000 0.250000 0.600000 0.050000 2.000000 -1 2 2 1 60.000000 60.000000;
+"Gen Masonry                     " 1050.000000 420.000000 0.250000 0.600000 0.079999 2.000000 -1 1 2 1 60.000000 60.000000;
+[.END_MASONRY_MATERIAL]
+
+[.S_STEEL_MATERIAL] <3>
+"A276 S316                       " 28000.000000 10780.000000 0.300000 0.930000 0.500001 30.000000 -1 75.000000 0;
+"A276 S321                       " 29000.000000 11165.000000 0.300000 0.730000 0.480000 65.000000 -1 94.000000 0;
+"A276 S304                       " 28000.000000 10780.000000 0.300000 0.930000 0.490000 30.000000 -1 75.000000 0;
+[.END_S_STEEL_MATERIAL]
+
+[END_MATERIAL_PROPERTIES]
+
+
+[SECTION_SETS]
+
+[.HR_STEEL_SECTION_SETS] <1>
+"HR1                             " "Wide Flange                     " "W10X33                          " 1 1 0 0 0 9.710000 36.600000 171.000000 0.583000 -1;
+[.END_HR_STEEL_SECTION_SETS]
+
+[.CF_STEEL_SECTION_SETS] <1>
+"CF1                             " "CU                              " "8CU1.25X057                     " 1 2 0 0 0 0.581000 0.056700 4.410000 0.000630 -1;
+[.END_CF_STEEL_SECTION_SETS]
+
+[.WOOD_SECTION_SETS] <1>
+"WOOD1                           " "Rectangular Double              " "2X6                             " 1 3 0 0 0 8.250000 1.546875 20.796875 5.124865 -1;
+[.END_WOOD_SECTION_SETS]
+
+[.GENERAL_SECTION_SETS] <2>
+"GEN1                            " "None                            " "RE4X4                           " 1 0 0 1 0 16.000000 21.333333 21.333333 31.573333 -1;
+"RIGID                           " "None                            " "                                " 0 0 7 1 0 1000000.000000 1000000.000000 1000000.000000 1000000.000000 -1;
+[.END_GENERAL_SECTION_SETS]
+
+[.CONCRETE_SECTION_SETS] <1>
+"CONC1                           " "Rectangular                     " "CRECT12X8                       " 1 5 0 0 0 96.000000 512.000000 1152.000000 1187.840000 -1;
+[.END_CONCRETE_SECTION_SETS]
+
+[.ALUMINUM_SECTION_SETS] <1>
+"AL1                             " "None                            " "AAI3X1.64                       " 1 6 0 1 0 1.390000 0.522000 2.240000 0.019000 -1;
+[.END_ALUMINUM_SECTION_SETS]
+
+[.STAINLESS_SECTION_SETS] <1>
+"SS1                             " "None                            " "W10X33_SS                       " 1 10 0 1 0 9.710000 36.600000 171.000000 0.583000 -1;
+[.END_STAINLESS_SECTION_SETS]
+
+[END_SECTION_SETS]
+
+
+[WOOD_SCHEDULES] <1>
+
+[WOOD_SCHEDULE : 1] <1>
+"AWC 2021 OSB                    " "AWC 2021 OSB                    " "S1_5/16_6d@6                    " "St-I      " "6.000000  " "n/a       " 0.312500 1.250000 0 1 6.000000 0.016667 13.000000 1;
+[END_WOOD_SCHEDULE : 1]
+
+[END_WOOD_SCHEDULES]
+
+
+[WOOD_SCHEDULES_DATA] <1>
+ 1;
+[END_WOOD_SCHEDULES_DATA]
+
+
+[WOOD_HOLDDOWN_SERIES] <1>
+
+[WOOD_HOLDDOWN_SERIES : 1] <1>
+"SIMPSON HoldDowns               " "DTT1Z-SD9x1.5_DF-SP             " "SIMPSON                         " "N/A       " "16d       " "Other     " 0 1 1.500000 0.500000 0 8 0.170000 0.840000 1.600000;
+[END_WOOD_HOLDDOWN_SERIES : 1]
+
+[END_WOOD_HOLDDOWN_SERIES]
+
+
+[COLDFORM_SCHEDULES] <2>
+
+[COLDFORM_SCHEDULE : 1] <1>
+"CFS Steel Sheeting              " "AISI 2020 Steel                 " "0.018_#8@6/12_33                " "Type I - Segmented" "Steel Sheathing                 " "No                              " 0 0.018000 6.000000 0 33.000000 8 0.040417 11346.000000;
+[END_COLDFORM_SCHEDULE : 1]
+
+[COLDFORM_SCHEDULE : 2] <1>
+"CFS Steel Sheeting              " "AISI 2020 Steel                 " "0.018_#8@6/12_33                " "Type I - Segmented" "Steel Sheathing                 " "No                              " 0 0.018000 6.000000 0 33.000000 8 0.040417 11346.000000;
+[END_COLDFORM_SCHEDULE : 2]
+
+[END_COLDFORM_SCHEDULES]
+
+
+[COLDFORM_SCHEDULES_DATA] <2>
+ 1;
+ 1;
+[END_COLDFORM_SCHEDULES_DATA]
+
+
+[DESIGN_RULES]
+
+[.SIZE_UC_RULES] <3>
+"Typical" -1.000000 -1.000000 -1.000000 -1.000000 1.000000 1.000000;
+"Typical" -1.000000 -1.000000 -1.000000 -1.000000 1.000000 1.000000;
+"Typical" -1.000000 -1.000000 -1.000000 -1.000000 1.000000 1.000000;
+[.END_SIZE_UC_RULES]
+
+[.DEFLECTION_RULES] <3>
+"Typical" -1.000000 240.000000 -1.000000 360.000000 -1.000000 240.000000 -1 -1.000000 360.000000 -1 -1.000000 360.000000;
+"Typical" -1.000000 240.000000 -1.000000 360.000000 -1.000000 240.000000 -1 -1.000000 360.000000 -1 -1.000000 360.000000;
+"Typical" -1.000000 240.000000 -1.000000 360.000000 -1.000000 240.000000 -1 -1.000000 360.000000 -1 -1.000000 360.000000;
+[.END_DEFLECTION_RULES]
+
+[.REBAR_RULES] <3>
+"Typical" 2 7 1 60.000000 80.000000 60.000000 80.000000 2 1.500000 1.500000 1.500000;
+"Typical" 2 7 1 60.000000 80.000000 60.000000 80.000000 2 1.500000 1.500000 1.500000;
+"Typical" 2 7 1 60.000000 80.000000 60.000000 80.000000 2 1.500000 1.500000 1.500000;
+[.END_REBAR_RULES]
+
+[.MASONRY_WALLPANEL_RULES] <3>
+"Typical" 3 16.000000 8.000000 60.000000 60.000000 2 2 1;
+"Typical" 3 16.000000 8.000000 60.000000 60.000000 2 2 1;
+"Typical" 3 16.000000 8.000000 60.000000 60.000000 2 2 1;
+[.END_MASONRY_WALLPANEL_RULES]
+
+[.WOOD_WALLPANEL_RULES] <3>
+"Typical" "2-2X6                           " "2X6                             " "2X6                             " "2-2X6                           " -1 16.000000 16.000000 -1 0.375000 0.468750 0 0 2 0 "CAN SIMPSON Catalog             " "Canadian Simpson HoldDowns      " 1 "CAN_HDU2-SDS2.5_DFL             " "SIMPSON                         " "N/A       " "16d       " "Other     " 3.000000 0.500000 0 8 0 0.092000 1 3.210000 1.150000;
+"Typical" "2-2X6                           " "2X6                             " "2X6                             " "2-2X6                           " -1 16.000000 16.000000 -1 0.375000 0.468750 0 0 2 0 "CAN SIMPSON Catalog             " "Canadian Simpson HoldDowns      " 1 "CAN_HDU2-SDS2.5_DFL             " "SIMPSON                         " "N/A       " "16d       " "Other     " 3.000000 0.500000 0 8 0 0.092000 1 3.210000 1.150000;
+"Typical" "2-2X6                           " "2X6                             " "2X6                             " "2-2X6                           " -1 16.000000 16.000000 -1 0.375000 0.468750 0 0 2 0 "CAN SIMPSON Catalog             " "Canadian Simpson HoldDowns      " 1 "CAN_HDU2-SDS2.5_DFL             " "SIMPSON                         " "N/A       " "16d       " "Other     " 3.000000 0.500000 0 8 0 0.092000 1 3.210000 1.150000;
+[.END_WOOD_WALLPANEL_RULES]
+
+[.CF_WALLPANEL_RULES] <3>
+"Typical" "600T125-30                      " "600T125-30                      " "600S137-33                      " "2-600S137-43-BB                 " "Type I - Segmented              " "Steel Sheet sheathing           " "600S137-33                      " 12.000000 24.000000 -1 0.018000 0.750000 3 0 0 0.000000 0.000000 1 -1 -1 0.150000 0;
+"Typical" "600T125-30                      " "600T125-30                      " "600S137-33                      " "2-600S137-43-BB                 " "Type I - Segmented              " "Steel Sheet sheathing           " "600S137-33                      " 12.000000 24.000000 -1 0.018000 0.750000 3 0 0 0.000000 0.000000 1 -1 -1 0.150000 0;
+"Typical" "600T125-30                      " "600T125-30                      " "600S137-33                      " "2-600S137-43-BB                 " "Type I - Segmented              " "Steel Sheet sheathing           " "600S137-33                      " 12.000000 24.000000 -1 0.018000 0.750000 3 0 0 0.000000 0.000000 1 -1 -1 0.150000 0;
+[.END_CF_WALLPANEL_RULES]
+
+[END_DESIGN_RULES]
+
+
+[MEMBER_DESIGN_RULES]
+
+[.MEMBER_SIZE_UC_RULES] <1>
+"Typical                         " -1.000000 -1.000000 -1.000000 -1.000000 1.000000 1.000000;
+[.END_MEMBER_SIZE_UC_RULES]
+
+[.MEMBER_DEFLECTION_RULES] <1>
+"Typical                         " -1.000000 240.000000 -1.000000 360.000000 -1.000000 240.000000 -1 -1.000000 360.000000 -1 -1.000000 360.000000 0 240.000000 1 360.000000 2 240.000000;
+[.END_MEMBER_DEFLECTION_RULES]
+
+[.MEMBER_REBAR_RULES] <1>
+"Typical                         " 3 7 1 60.000000 80.000000 60.000000 80.000000 2 1.500000 1.500000 1.500000 1 2 1 12.000000 0;
+[.END_MEMBER_REBAR_RULES]
+
+[END_MEMBER_DESIGN_RULES]
+
+
+[WALL_DESIGN_RULES]
+
+[.MASONRY_WALLPANEL_RULES] <3>
+"Typical                         " 3 16.000000 8.000000 60.000000 60.000000 2 2 1 1 1 0 8 2 0 0 0 0 2 2 0 8.000000 40.000000 0 0 16.000000 8.000000 2 1 3 0 4.000000 3.500000 1 0 0.000000 0;
+"Typical_2                       " 3 16.000000 8.000000 60.000000 60.000000 2 2 1 1 1 0 8 2 0 0 0 0 2 2 0 8.000000 40.000000 0 0 16.000000 8.000000 2 1 3 0 4.000000 3.500000 1 0 0.000000 0;
+"Typical_1                       " 3 16.000000 8.000000 60.000000 60.000000 2 2 1 1 1 0 8 2 0 0 0 0 2 2 0 8.000000 40.000000 0 0 16.000000 8.000000 2 1 3 0 4.000000 3.500000 1 0 0.000000 0;
+[.END_MASONRY_WALLPANEL_RULES]
+
+[.WOOD_WALLPANEL_RULES] <3>
+"Typical                         " "2-2X8                           " "2X6                             " "2X6                             " "2-2X8                           " 0 16.000000 16.000000 -1 0.375000 0.750000 0 0 3 0 "SIMPSON HoldDowns               " "Simpson HoldDowns               " 1 "DTT1Z-SD9x1.5_DF-SP             " "SIMPSON                         " "N/A       " "16d       " "Other     " 1.500000 0.500000 0 8 0 0.170000 1 0.840000 1.600000 "6x8                             " 5.500000 7.250000 -1 0.750000 0 "SIMPSON Chord Straps            " "Simpson Chord Straps            " 1 "MSTA49_18_DF/SP_Nail            " "SIMPSON                         " "0.148 x 2 1/2                   " 18.000000 0.000000 0 0 26 1.600000 2.020000;
+"Typical_2                       " "2-2X8                           " "2X6                             " "2X6                             " "2-2X8                           " 0 16.000000 16.000000 -1 0.375000 0.750000 0 0 3 0 "SIMPSON HoldDowns               " "Simpson HoldDowns               " 1 "DTT1Z-SD9x1.5_DF-SP             " "SIMPSON                         " "N/A       " "16d       " "Other     " 1.500000 0.500000 0 8 0 0.170000 1 0.840000 1.600000 "6x8                             " 5.500000 7.250000 -1 0.750000 0 "SIMPSON Chord Straps            " "Simpson Chord Straps            " 1 "MSTA49_18_DF/SP_Nail            " "SIMPSON                         " "0.148 x 2 1/2                   " 18.000000 0.000000 0 0 26 1.600000 2.020000;
+"Typical_1                       " "2-2X8                           " "2X6                             " "2X6                             " "2-2X8                           " 0 16.000000 16.000000 -1 0.375000 0.750000 0 0 3 0 "SIMPSON HoldDowns               " "Simpson HoldDowns               " 1 "DTT1Z-SD9x1.5_DF-SP             " "SIMPSON                         " "N/A       " "16d       " "Other     " 1.500000 0.500000 0 8 0 0.170000 1 0.840000 1.600000 "6x8                             " 5.500000 7.250000 -1 0.750000 0 "SIMPSON Chord Straps            " "Simpson Chord Straps            " 1 "MSTA49_18_DF/SP_Nail            " "SIMPSON                         " "0.148 x 2 1/2                   " 18.000000 0.000000 0 0 26 1.600000 2.020000;
+[.END_WOOD_WALLPANEL_RULES]
+
+[.CF_WALLPANEL_RULES] <3>
+"Typical                         " "600T125-33                      " "600T125-33                      " "600S137-33                      " "2-600S137-43-BB                 " "Type I - Segmented              " "Steel Sheet sheathing           " "600S137-33                      " 12.000000 12.000000 0 0.018000 0.750000 2 0 0 0.000000 0.000000 1 -1 -1 0.150000 0;
+"Typical_2                       " "600T125-33                      " "600T125-33                      " "600S137-33                      " "2-600S137-43-BB                 " "Type I - Segmented              " "Steel Sheet sheathing           " "600S137-33                      " 12.000000 12.000000 1 0.018000 0.750000 2 0 0 0.000000 0.000000 1 -1 -1 0.150000 0;
+"Typical_1                       " "600T125-33                      " "600T125-33                      " "600S137-33                      " "2-600S137-43-BB                 " "Type I - Segmented              " "Steel Sheet sheathing           " "600S137-33                      " 12.000000 12.000000 1 0.018000 0.750000 2 0 0 0.000000 0.000000 1 -1 -1 0.150000 0;
+[.END_CF_WALLPANEL_RULES]
+
+[.CONCRETE_WALLPANEL_RULES] <3>
+3 18.000000 4.000000 2.000000 1 18.000000 4.000000 2.000000 0 0 1.000000 1.000000 2.000000 0 0 0;
+3 18.000000 4.000000 2.000000 1 18.000000 4.000000 2.000000 0 0 1.000000 1.000000 2.000000 0 0 0;
+3 18.000000 4.000000 2.000000 1 18.000000 4.000000 2.000000 0 0 1.000000 1.000000 2.000000 0 0 0;
+[.END_CONCRETE_WALLPANEL_RULES]
+
+[.UC_WALLPANEL_RULES] <3>
+1.000000 1.000000;
+1.000000 1.000000;
+1.000000 1.000000;
+[.END_UC_WALLPANEL_RULES]
+
+[END_WALL_DESIGN_RULES]
+
+
+[SEISMIC_DESIGN_RULES] <36>
+"OCBF                            " 2 1 0 5 0 1.000000 0.000000 0 0 0 2 2 2;
+"SCBF                            " 0 1 0 5 1 1.000000 0.000000 0 1 1 0 0 0;
+"OMF                             " 0 1 0 2 0 1.000000 12.000000 0 0 2 2 2 -1;
+"IMF                             " 0 1 0 0 0 1.000000 12.000000 0 0 3 1 1 -1;
+"SMF-RBS                         " 0 1 0 1 0 0.685000 14.625000 0 0 4 0 0 -1;
+"SMF-KaiserB                     " 0 1 0 7 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-KaiserW                     " 0 1 0 6 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-BSEEP                       " 0 1 0 3 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-WUF-W                       " 0 1 0 4 0 1.000000 0.000000 0 0 4 0 0 -1;
+"OCBF_2                          " 2 1 0 5 0 1.000000 0.000000 0 0 0 2 2 2;
+"SCBF_2                          " 0 1 0 5 1 1.000000 0.000000 0 1 1 0 0 0;
+"OMF_2                           " 0 1 0 2 0 1.000000 12.000000 0 0 2 2 2 -1;
+"IMF_2                           " 0 1 0 0 0 1.000000 12.000000 0 0 3 1 1 -1;
+"SMF-RBS_2                       " 0 1 0 1 0 0.685000 14.625000 0 0 4 0 0 -1;
+"SMF-KaiserB_2                   " 0 1 0 7 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-KaiserW_2                   " 0 1 0 6 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-BSEEP_2                     " 0 1 0 3 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-WUF-W_2                     " 0 1 0 4 0 1.000000 0.000000 0 0 4 0 0 -1;
+"OCBF_1                          " 2 1 0 5 0 1.000000 0.000000 0 0 0 2 2 2;
+"SCBF_1                          " 0 1 0 5 1 1.000000 0.000000 0 1 1 0 0 0;
+"OMF_1                           " 0 1 0 2 0 1.000000 12.000000 0 0 2 2 2 -1;
+"IMF_1                           " 0 1 0 0 0 1.000000 12.000000 0 0 3 1 1 -1;
+"SMF-RBS_1                       " 0 1 0 1 0 0.685000 14.625000 0 0 4 0 0 -1;
+"SMF-KaiserB_1                   " 0 1 0 7 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-KaiserW_1                   " 0 1 0 6 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-BSEEP_1                     " 0 1 0 3 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-WUF-W_1                     " 0 1 0 4 0 1.000000 0.000000 0 0 4 0 0 -1;
+"OCBF_3                          " 2 1 0 5 0 1.000000 0.000000 0 0 0 2 2 2;
+"SCBF_3                          " 0 1 0 5 1 1.000000 0.000000 0 1 1 0 0 0;
+"OMF_3                           " 0 1 0 2 0 1.000000 12.000000 0 0 2 2 2 -1;
+"IMF_3                           " 0 1 0 0 0 1.000000 12.000000 0 0 3 1 1 -1;
+"SMF-RBS_3                       " 0 1 0 1 0 0.685000 14.625000 0 0 4 0 0 -1;
+"SMF-KaiserB_3                   " 0 1 0 7 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-KaiserW_3                   " 0 1 0 6 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-BSEEP_3                     " 0 1 0 3 0 1.000000 12.000000 0 0 4 0 0 -1;
+"SMF-WUF-W_3                     " 0 1 0 4 0 1.000000 0.000000 0 0 4 0 0 -1;
+[END_SEISMIC_DESIGN_RULES]
+
+
+[SEISMIC_DESIGN_RULES_CONCRETE_WALL] <3>
+"Ordinary                        " 0 0;
+"Intermediate Precast            " 1 0;
+"Special                         " 2 0;
+[END_SEISMIC_DESIGN_RULES_CONCRETE_WALL]
+
+
+[SEISMIC_DESIGN_RULES_MASONRY_WALL] <3>
+"Ordinary                        " 1 0 0 0;
+"Intermediate                    " 2 0 0 0;
+"Special                         " 3 0 1 1;
+[END_SEISMIC_DESIGN_RULES_MASONRY_WALL]
+
+
+[CONNECTION_RULES] <36>
+"Col/Bm Single Angle Shear       " 1 993452951845350969 0 0 9 1.500000 1;
+"Col/Bm Double Angle Shear       " 1 1592865907197914655 0 0 1 0.000000 1;
+"Col/Bm Two Side Clip Angle Shear" 28 9275097939945433552 0 0 1 0.000000 1;
+"Col/Bm End Plate Shear          " 2 2710354516875182649 -1 0 1 0.000000 1;
+"Col/Bm Shear Tab Shear          " 3 18187042562187431526 0 -1 1 0.000000 1;
+"Girder/Bm Single Angle Shear    " 6 11674474902754592773 0 0 5 0.000000 1;
+"Girder/Bm Double Angle Shear    " 6 8394374335248906855 0 0 1 0.000000 1;
+"Grd/Bm Two Side Clip Angle Shear" 29 214792601637572214 0 0 1 0.000000 1;
+"Girder/Bm End Plate Shear       " 7 8447679672556664592 -1 0 1 0.000000 1;
+"Girder/Bm Shear Tab Shear       " 8 2913489063372286531 0 -1 1 0.000000 1;
+"Beam Shear Splice               " 9 10892256906333197693 0 -1 1 0.000000 1;
+"Column Shear Splice             " 12 17095863598857888528 -1 0 1 0.000000 1;
+"Col/Bm Ext. End Plate Moment    " 4 4015654005771199629 -1 -1 1 0.000000 2;
+"Col/Bm PartExt. End Plate Moment" 21 12364236422621213821 -1 -1 1 0.000000 2;
+"Col/Bm Flush End Plate Moment   " 22 18379088712269223136 -1 -1 1 0.000000 2;
+"Col/Bm Flange Plate Moment      " 5 10239130270204391181 0 -1 1 0.000000 2;
+"Col/Bm Direct Weld Moment       " 19 368894869790940458 0 -1 1 0.000000 2;
+"Col/Bm Seismic Moment           " 20 8652145819947503963 -1 -1 1 0.000000 2;
+"Beam Moment Plate Splice        " 10 16870091139605710861 0 -1 1 0.000000 2;
+"Column Moment Plate Splice      " 13 14662725318407413205 -1 -1 1 0.000000 2;
+"Beam Direct Weld Moment Splice  " 17 5602087872475085467 0 -1 1 0.000000 2;
+"Col Direct Weld Moment Splice   " 18 8446167711750958518 -1 0 1 0.000000 2;
+"Bm Ext. End Plate Moment Splice " 11 10379547034791641692 0 -1 1 0.000000 2;
+"Col Ext. End Plate Moment Splice" 14 16431246652165287998 -1 0 1 0.000000 2;
+"Column Cap Plate Moment         " 35 8015258557767356053 0 -1 1 0.000000 2;
+"Cont. Beam Over Col Moment      " 36 297627143264951306 0 -1 1 0.000000 2;
+"Diagonal Vertical Brace         " 15 919729652493080487 -1 -1 1 0.000000 3;
+"Chevron Vertical Brace          " 16 3640790286456182446 -1 -1 0 0.000000 3;
+"Seismic Diagonal Brace          " 23 8161692605842089509 -1 -1 1 0.000000 3;
+"Seismic Chevron Brace           " 24 15870886008307894214 -1 -1 1 0.000000 3;
+"Knee Brace                      " 26 911430566462103118 -1 -1 1 0.000000 3;
+"Ext. Shear Tab without Gusset   " 33 6554547259791349323 0 -1 1 0.000000 3;
+"Ext. Shear Tab with Gusset      " 34 9139606000807944405 0 -1 1 0.000000 3;
+"Single Column Base Plate        " 25 17892545822528359698 -1 -1 1 0.000000 4;
+"Base Plate with Vertical Brace  " 30 1795835946659089557 -1 -1 1 0.000000 3;
+"HSS Truss Connection            " 27 6300511451457919679 -1 -1 1 0.000000 5;
+[END_CONNECTION_RULES]
+
+`;
+
+  const R3D_SHAPES = `[SHAPES_LIST] <8>
+"P1001_7FT                       " 21 208 2 0.708136 2.850000 0.085000 1.625000 1.425000 0.120000 0.752888 0.315426 0.770000 1.058294 0.715991 1.985526 0.288294 0.000000 1.261642 -0.288294 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.050000;
+"2C4X5.4X6                       " 5 10 1 3.160000 4.000000 0.184000 1.580000 0.296000 0.750000 7.690200 2.820000 4.580000 2.630000 0.079800 1.842000 0.000000 0.000000 1.823700 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 7.000000;
+"W10X33                          " 5 1 1 9.710000 9.730000 0.290000 7.960000 0.435000 2.160000 171.000000 36.600000 38.800000 14.000000 0.583000 791.000000 18.500000 16.000000 7.750000 18.900000 0.935000 0.750000 0.000000 1.125000 0.000000 0.000000 0.000000 7.000000;
+"8CU1.25X057                     " 20 200 2 0.581000 8.000000 0.057000 1.250000 0.000000 0.187500 4.410000 0.056700 0.146500 0.293000 0.000630 0.699000 6.660000 0.000000 2.810000 -0.440000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.010000;
+"AAI3X1.64                       " 18 450 6 1.390000 3.000000 0.130000 2.500000 0.200000 0.250000 2.240000 0.522000 1.490000 0.418000 0.019000 1.020000 0.000000 0.000000 0.000000 1.410000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 2.010000;
+"W10X33_SS                       " 38 501 10 9.710000 9.730000 0.290000 7.960000 0.435000 2.160000 171.000000 36.600000 38.800000 14.000000 0.583000 791.000000 18.500000 16.000000 7.750000 18.900000 0.935000 0.750000 0.000000 1.130000 0.000000 0.000000 0.000000 3.010000;
+"600T125-33                      " 39 200 2 0.294000 6.146000 0.034600 1.250000 0.000000 0.076400 1.430000 0.033800 0.178992 0.337488 0.000117 0.238000 4.220000 0.000000 2.290000 -0.516000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 3.000000;
+"600S137-33                      " 39 201 2 0.318000 6.000000 0.034600 1.375000 0.375000 0.076500 1.580000 0.068500 0.287772 0.518831 0.000127 0.500000 3.650000 0.000000 2.420000 -0.807000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 3.000000;
+[END_SHAPES_LIST]
+
+
+[CUSTOM_REPORT_SECTIONS_3D] <0>
+[END_CUSTOM_REPORT_SECTIONS_3D] `;
+
+  const R3D_TAIL = `[TIME_HISTORY_INPUT]
+0 0 0.000000 0.250000 0.500000 0.000000 0.000000 5.000000 0.000000 1.000000;
+[END_TIME_HISTORY_INPUT]
+
+[EIGENSOLUTION_DATA] <1>
+3 1 0.000100 1 1 1 1 1 1 0 0 0 0 1 1 1 1 1 1 0 0 0 0 3;
+[END_EIGENSOLUTION_DATA]
+
+
+[RESPONSE_SPECTRA_DATA] <1>
+0 0 0 21 21 21 0 0 0 33.000000 33.000000 33.000000 1 5.000000 0;
+[END_RESPONSE_SPECTRA_DATA]
+
+
+[SPECTRA_SCALING_FACTOR] <1>
+-1.000000 -1.000000 -1.000000 -1.000000 2 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000 1.000000;
+[END_SPECTRA_SCALING_FACTOR]
+
+
+[LOAD_COMBINATIONS] <26>
+"DL                                                                             " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D + L                                                                          " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "2                               " 1.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D + 0.7NoTR                                                                    " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "3                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D + 0.7NoTL                                                                    " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "4                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D + 0.7NoLR                                                                    " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "5                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  + 0.7NoLL                                                                   " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "6                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D - 0.7NoTR                                                                    " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "3                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  - 0.7NoTL                                                                   " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "4                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  - 0.7NoLR                                                                   " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "5                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  - 0.7NoLL                                                                   " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "6                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  + 0.525NoTR + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "3                               " 0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  + 0.525NoTL + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "4                               " 0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  + 0.525NoLR + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "5                               " 0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  + 0.525NoLL + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "6                               " 0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D - 0.525NoTR + 0.75L                                                          " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "3                               " -0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  - 0.525NoTL + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "4                               " -0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  - 0.525NoLR + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "5                               " -0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"D  - 0.525NoLL + 0.75L                                                         " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "6                               " -0.525000 "2                               " 0.750000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  + 0.7NoTR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "3                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  + 0.7NoTL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "4                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  + 0.7NoLR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "5                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  + 0.7NoLL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "6                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  - 0.7NoTR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "3                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  - 0.7NoTL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "4                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  - 0.7NoLR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "5                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+"0.6D  - 0.7NoLL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "6                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+[END_LOAD_COMBINATIONS]
+
+
+[SAVED_SELECTION_STATES] <2>
+"Risa crossing nodes                                                                                                                                                                                     ";
+"Ad 2ft to Stanalone nodes                                                                                                                                                                               ";
+[END_SAVED_SELECTION_STATES]
+
+
+[FILE_INFORMATION]
+
+[.FILE_SOURCE] <1>
+2;
+[.END_FILE_SOURCE]
+
+[.FILE_TYPE] <1>
+0;
+[.END_FILE_TYPE]
+
+[END_FILE_INFORMATION]
+
+
+[NUM_RF_BLC] <1>
+27;
+[END_NUM_RF_BLC]
+
+
+[RISA_3D_FINISH]
+0
+[FINISH]`;
+
+  // ---------------------------------------------------------------------------
+  // App state
+  // ---------------------------------------------------------------------------
+  const state = { dxf: null, pinDxf: null, csv: null, nosCsv: null, output: null, unconnectedPins: null };
+
+  // ---------------------------------------------------------------------------
+  // Drag-over styling
+  // ---------------------------------------------------------------------------
+  [['dxf-zone', 'dxf'], ['pinbc-zone', 'pinDxf'], ['csv-zone', 'csv'], ['nos-zone', 'nosCsv']].forEach(([id, type]) => {
+    const zone = document.getElementById(id);
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      handleFile(type, file);
+    });
+  });
+
+  // Revision pill is written from APP_REV, so the badge and the source can
+  // never disagree and a revision number can't accidentally be reused.
+  document.getElementById('version-badge').textContent = 'Rev ' + APP_REV;
+
+  document.getElementById('dxf-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile('dxf', e.target.files[0]);
+  });
+  document.getElementById('pinbc-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile('pinDxf', e.target.files[0]);
+  });
+  document.getElementById('csv-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile('csv', e.target.files[0]);
+  });
+  document.getElementById('nos-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile('nosCsv', e.target.files[0]);
+  });
+
+  function handleFile(type, file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target.result;
+      if (type === 'dxf') {
+        state.dxf = text;
+        showFileStatus('dxf', file.name);
+        renderHssDxfPreview(text);
+      } else if (type === 'pinDxf') {
+        state.pinDxf = text;
+        showFileStatus('pinbc', file.name);
+        renderPinBcPreview(text);
+      } else if (type === 'nosCsv') {
+        state.nosCsv = text;
+        showFileStatus('nos', file.name);
+        renderNosCsvPreview(text);
+      } else {
+        state.csv = text;
+        showFileStatus('csv', file.name);
+        renderCsvPreview(text);
+      }
+      updateGenerateButton();
+    };
+    reader.readAsText(file);
+  }
+
+  function showFileStatus(prefix, name) {
+    document.getElementById(`${prefix}-filename`).textContent = name;
+    document.getElementById(`${prefix}-status`).classList.add('visible');
+    document.getElementById(`${prefix}-zone`).classList.add('loaded');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Panel previews
+  // ---------------------------------------------------------------------------
+  function renderHssDxfPreview(text) {
+    const dxfLines = parseDxfLines(text);
+    // Deduplicate using the same mmKey + distance-fallback logic as generate()
+    const previewNodes = [];
+    const jointIndex = new Map();
+    for (const line of dxfLines) {
+      for (const [ex, ey] of [[line.x1, line.y1], [line.x2, line.y2]]) {
+        const k = mmKey(ex, ey);
+        if (jointIndex.has(k)) continue;
+        const near = findNearNode(ex, ey, previewNodes, RISA_MERGE_TOL_MM);
+        if (near !== -1) { jointIndex.set(k, near); continue; }
+        jointIndex.set(k, previewNodes.length);
+        previewNodes.push({ xFt: ex, yFt: ey });
+      }
+    }
+    let p1001 = 0, c2c4 = 0;
+    const seenPairs = new Set();
+    for (const line of dxfLines) {
+      const ji1 = jointIndex.get(mmKey(line.x1, line.y1));
+      const ji2 = jointIndex.get(mmKey(line.x2, line.y2));
+      if (ji1 === undefined || ji2 === undefined || ji1 === ji2) continue;
+      const key = ji1 < ji2 ? `${ji1},${ji2}` : `${ji2},${ji1}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      if (line.layer === '2C4X5.4X6') c2c4++; else p1001++;
+    }
+    const box = document.getElementById('dxf-preview');
+    if (p1001 + c2c4 === 0) { box.innerHTML = '<span>No LINE entities found.</span>'; return; }
+    box.classList.add('has-content');
+    let rows = '';
+    if (p1001 > 0) rows += `<div class="entity-row"><span class="entity-name">P1001_7FT</span><span class="entity-count">${p1001}</span></div>`;
+    if (c2c4 > 0)  rows += `<div class="entity-row"><span class="entity-name">2C4X5.4X6</span><span class="entity-count">${c2c4}</span></div>`;
+    box.innerHTML = `<div class="entity-list">${rows}</div>`;
+  }
+
+  function renderPinBcPreview(text) {
+    const pts = parseDxfPoints(text);
+    const box = document.getElementById('pinbc-preview');
+    if (pts.length === 0) { box.innerHTML = '<span>No POINT entities found.</span>'; return; }
+    box.classList.add('has-content');
+    box.innerHTML = `<div class="entity-list">
+      <div class="entity-row"><span class="entity-name">Nodes</span><span class="entity-count">${pts.length}</span></div>
+    </div>`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // CSV parsing and preview
+  // ---------------------------------------------------------------------------
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    return lines.map(line => {
+      const cols = [];
+      let cur = '', inQuote = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQuote = !inQuote; }
+        else if (ch === ',' && !inQuote) { cols.push(cur); cur = ''; }
+        else { cur += ch; }
+      }
+      cols.push(cur);
+      return cols;
+    });
+  }
+
+  function renderCsvPreview(text) {
+    const rows = parseCSV(text);
+    const box = document.getElementById('csv-preview');
+    if (rows.length < 2) { box.innerHTML = '<span>No data rows found.</span>'; return; }
+    const dataRows = rows.slice(1);
+    let dl = 0, ll = 0;
+    for (const row of dataRows) {
+      if (Math.round(parseFloat(row[1]) || 0) !== 0) dl++;
+      if (Math.round(parseFloat(row[2]) || 0) !== 0) ll++;
+    }
+    box.classList.add('has-content');
+    box.innerHTML = `<div class="entity-list">
+      <div class="entity-row"><span class="entity-name">Total loads</span><span class="entity-count">${dl + ll}</span></div>
+      <div class="entity-row"><span class="entity-name">Dead loads (DL)</span><span class="entity-count">${dl}</span></div>
+      <div class="entity-row"><span class="entity-name">Live loads (LL)</span><span class="entity-count">${ll}</span></div>
+    </div>`;
+  }
+
+  function renderNosCsvPreview(text) {
+    const rows = parseCSV(text);
+    const box = document.getElementById('nos-preview');
+    if (rows.length < 2) { box.innerHTML = '<span>No data rows found.</span>'; return; }
+    const counts = { NOTR: 0, NOTL: 0, NOLR: 0, NOLL: 0 };
+    for (const row of rows.slice(1)) {
+      const layer = (row[1] || '').trim().toUpperCase();
+      if (layer in counts) counts[layer]++;
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (total === 0) { box.innerHTML = '<span>No notional load nodes found.</span>'; return; }
+    box.classList.add('has-content');
+    box.innerHTML = `<div class="entity-list">
+      ${Object.entries(counts).filter(([, v]) => v > 0).map(([k, v]) =>
+        `<div class="entity-row"><span class="entity-name">${k}</span><span class="entity-count">${v}</span></div>`
+      ).join('')}
+    </div>`;
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Generate button state
+  // ---------------------------------------------------------------------------
+  function updateGenerateButton() {
+    document.getElementById('btn-generate').disabled = !(state.dxf || state.csv || state.pinDxf || state.nosCsv);
+  }
+
+  function clearPanel(stateKey, prefix, inputId, previewId, emptyMsg) {
+    state[stateKey] = null;
+    document.getElementById(inputId).value = '';
+    document.getElementById(`${prefix}-status`).classList.remove('visible');
+    document.getElementById(`${prefix}-zone`).classList.remove('loaded');
+    const box = document.getElementById(previewId);
+    box.classList.remove('has-content');
+    box.innerHTML = `<span>${emptyMsg}</span>`;
+    updateGenerateButton();
+  }
+
+  document.getElementById('dxf-clear').addEventListener('click', () =>
+    clearPanel('dxf', 'dxf', 'dxf-input', 'dxf-preview', 'No file loaded.'));
+  document.getElementById('pinbc-clear').addEventListener('click', () =>
+    clearPanel('pinDxf', 'pinbc', 'pinbc-input', 'pinbc-preview', 'No file loaded.'));
+  document.getElementById('csv-clear').addEventListener('click', () =>
+    clearPanel('csv', 'csv', 'csv-input', 'csv-preview', 'No file loaded.'));
+  document.getElementById('nos-clear').addEventListener('click', () =>
+    clearPanel('nosCsv', 'nos', 'nos-input', 'nos-preview', 'No file loaded.'));
+
+  // ---------------------------------------------------------------------------
+  // R3D conversion helpers
+  // ---------------------------------------------------------------------------
+  function pad32(s) {
+    return String(s).padEnd(32, ' ');
+  }
+
+  function toR3D(v) {
+    return v.toExponential(12).replace(/e([+-])(\d)$/, (_, sign, d) => `e${sign}0${d}`);
+  }
+
+  function uuidv4() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  function parseDxfLines(text) {
+    const lines = text.split(/\r?\n/);
+    const result = [];
+    let inLine = false, cur = {};
+    let i = 0;
+    while (i < lines.length - 1) {
+      const code = lines[i].trim();
+      const val = lines[i + 1].trim();
+      i += 2;
+      const c = parseInt(code);
+      if (isNaN(c)) continue;
+      if (c === 0) {
+        if (inLine && cur.x1 !== undefined && cur.x2 !== undefined) result.push({ ...cur });
+        inLine = val.toUpperCase() === 'LINE';
+        cur = {};
+      } else if (inLine) {
+        if (c === 8)  cur.layer = val;
+        if (c === 10) cur.x1 = parseFloat(val) / 304.8;
+        if (c === 20) cur.y1 = parseFloat(val) / 304.8;
+        if (c === 11) cur.x2 = parseFloat(val) / 304.8;
+        if (c === 21) cur.y2 = parseFloat(val) / 304.8;
+      }
+    }
+    if (inLine && cur.x1 !== undefined && cur.x2 !== undefined) result.push({ ...cur });
+    return result;
+  }
+
+  function parseDxfPoints(text) {
+    const lines = text.split(/\r?\n/);
+    const result = [];
+    let inPoint = false, cur = {};
+    let i = 0;
+    while (i < lines.length - 1) {
+      const code = lines[i].trim();
+      const val = lines[i + 1].trim();
+      i += 2;
+      const c = parseInt(code);
+      if (isNaN(c)) continue;
+      if (c === 0) {
+        if (inPoint && cur.x !== undefined) result.push({ ...cur });
+        inPoint = val.toUpperCase() === 'POINT';
+        cur = {};
+      } else if (inPoint) {
+        if (c === 10) cur.x = parseFloat(val) / 304.8;
+        if (c === 20) cur.y = parseFloat(val) / 304.8;
+        if (c === 30) cur.z = parseFloat(val) / 304.8;
+      }
+    }
+    if (inPoint && cur.x !== undefined) result.push({ ...cur });
+    return result;
+  }
+
+  // Rounds to the nearest 1mm to absorb CAD float-precision noise (e.g.
+  // "28041.60000056092" vs "28041.6" for the same point) — not a search
+  // radius, just coordinate-equality that tolerates float noise. Shared by
+  // the HSS preview and generate() so both always agree on node counts.
+  const mmKey = (xFt, yFt) => `${Math.round(xFt * 304.8)},${Math.round(yFt * 304.8)}`;
+
+  // The mmKey bucket above can still miss a real match at its own edges: two
+  // points 0.1mm apart can round into different mm buckets if they straddle
+  // an integer-mm boundary (e.g. 28041.4985 vs 28041.6000). No bucket size
+  // fixes this — it's a boundary problem, not a resolution problem. So
+  // wherever an exact mmKey lookup misses, fall back to checking actual
+  // distance against every candidate node, using RISA-3D's own default
+  // duplicate-node merge tolerance (0.01 ft) as the bound. This isn't
+  // snapping a point onto a different, distant one — it's closing the same
+  // float-noise gap mmKey already exists to absorb, just past its own edge.
+  // Left unhandled, near-miss duplicates like this get created as separate
+  // nodes, and RISA's "Merge Crossing Members" later deletes one of the
+  // pair by node number — not by which one carries a boundary condition —
+  // which can silently drop a Pin BC.
+  const RISA_MERGE_TOL_MM = 3.048; // 0.01 ft
+  // `limit` restricts the search to the first N entries — used to search only
+  // the joint prefix of the canonical node table, since joints register first.
+  function findNearNode(px, py, nodes, tolMm, limit) {
+    const tolFt = tolMm / 304.8;
+    const end = limit === undefined ? nodes.length : limit;
+    let bestIdx = -1, bestDist = tolFt;
+    for (let i = 0; i < end; i++) {
+      const d = Math.hypot(px - nodes[i].xFt, py - nodes[i].yFt);
+      if (d <= bestDist) { bestDist = d; bestIdx = i; }
+    }
+    return bestIdx;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Main conversion
+  // ---------------------------------------------------------------------------
+  function generate() {
+    // Canonical node table. Every node — joint, load, pin-only, notional —
+    // registers here, so one physical coordinate is one node no matter which
+    // group reached it first. Without this, dedup was per-group: a load node
+    // and a notional node at the same spot became two nodes, and RISA's own
+    // node merge would report them as duplicates.
+    //
+    // Merging removes the NODE, never the data attached to it. Load entries
+    // are re-pointed at the surviving node, never dropped or combined, and a
+    // boundary condition follows its node. A merged node can therefore carry
+    // gravity loads (cases 1-2) and a notional load (cases 3-6) at once —
+    // different load cases, so nothing collides.
+    //
+    // When nodes merge, the most informative label wins rather than whichever
+    // registered first. A CSV persistent ID ties a node back to its takeoff row
+    // and can't be reconstructed from anything else; "J412" and "P7" are just
+    // positional, and a notional row's "#NO LABEL" says nothing at all.
+    const LBL_NOTIONAL = 0, LBL_PIN = 1, LBL_JOINT = 2, LBL_LOAD_ID = 3;
+    const nodes = [];         // { xFt, yFt, label, lblRank }
+    const nodeMm = new Map(); // mmKey → canonical index
+    let nodesMerged = 0;
+    function claimLabel(i, label, rank) {
+      if (rank > nodes[i].lblRank) { nodes[i].label = label; nodes[i].lblRank = rank; }
+      return i;
+    }
+    function internNode(xFt, yFt, label, rank) {
+      const k = mmKey(xFt, yFt);
+      let i = nodeMm.get(k);
+      if (i !== undefined) { nodesMerged++; return claimLabel(i, label, rank); }
+      // Same boundary-straddle fallback as the joint builder: two points a
+      // fraction of a mm apart can round into different mm buckets.
+      i = findNearNode(xFt, yFt, nodes, RISA_MERGE_TOL_MM);
+      if (i === -1) {
+        i = nodes.length;
+        nodes.push({ xFt, yFt, label, lblRank: rank });
+      } else {
+        nodesMerged++;
+        claimLabel(i, label, rank);
+      }
+      nodeMm.set(k, i);
+      return i;
+    }
+
+    // 1. Parse HSS DXF → unique joint nodes + members (exact coordinate
+    // matching only — members are exactly what's drawn in the DXF, never
+    // split or modified by this tool; if a member needs to be broken at a
+    // connection point, that's done in AutoCAD, not inferred here).
+    // Deduped via mmKey (nearest 1mm), same as everything else in this
+    // pipeline — two line endpoints meant to be the same corner but off by
+    // CAD float noise (e.g. "28041.60000056092" vs "28041.6") must land on
+    // one joint node, not two. Using an exact-string key here (as before)
+    // let those float-noise duplicates through, which RISA's own node-merge
+    // would later catch — but destructively, since merging away a joint
+    // that coincides with a Pin BC node can drop that boundary condition.
+    // Joints register first, so they occupy the low canonical indices and the
+    // node table doubles as the joint list — no separate jointNodes array to
+    // keep in sync. internNode already applies the same mmKey + distance test
+    // the joint builder used to do inline.
+    const dxfLineEntities = state.dxf ? parseDxfLines(state.dxf) : [];
+    const jointIndex = new Map(); // mmKey → canonical node index
+    let jointCount = 0;
+    for (const line of dxfLineEntities) {
+      for (const [ex, ey] of [[line.x1, line.y1], [line.x2, line.y2]]) {
+        const k = mmKey(ex, ey);
+        if (jointIndex.has(k)) continue;
+        const before = nodes.length;
+        const idx = internNode(ex, ey, 'J' + (jointCount + 1), LBL_JOINT);
+        if (nodes.length > before) jointCount++; // label consumed by a new node
+        jointIndex.set(k, idx);
+      }
+    }
+    // Merges so far are float-noise duplicates within the frame itself (the
+    // Rev 22 fix doing its job). Counted separately from the cross-group merges
+    // below so the summary can distinguish "CAD noise" from "a notional node
+    // landing on a load node".
+    const jointNoiseMerged = nodesMerged;
+    nodesMerged = 0;
+
+    const members = [];
+    const seenPairs = new Set();
+    for (const line of dxfLineEntities) {
+      const ji1 = jointIndex.get(mmKey(line.x1, line.y1));
+      const ji2 = jointIndex.get(mmKey(line.x2, line.y2));
+      if (ji1 === undefined || ji2 === undefined || ji1 === ji2) continue;
+      const key = ji1 < ji2 ? `${ji1},${ji2}` : `${ji2},${ji1}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      members.push({ nodeI: ji1 + 1, nodeJ: ji2 + 1, layer: line.layer || '' });
+    }
+
+    // 2. Parse CSV → load nodes (optional)
+    const loadNodes = [];
+    let badLoadRows = 0;
+    if (state.csv) {
+      const csvRows = parseCSV(state.csv);
+      for (let i = 1; i < csvRows.length; i++) {
+        const row = csvRows[i];
+        const id = (row[0] || '').trim();
+        if (!id) continue;
+        const xFt = parseFloat(row[3]) / 304.8;
+        const yFt = parseFloat(row[4]) / 304.8;
+        // A blank or non-numeric coordinate would otherwise propagate NaN all
+        // the way into the node line, producing a .r3d RISA can't read — and
+        // silently, since NaN fails every comparison without throwing. Skip and
+        // report, same as the notional parser already does.
+        if (isNaN(xFt) || isNaN(yFt)) { badLoadRows++; continue; }
+        loadNodes.push({
+          id,
+          dl: parseFloat(row[1]) || 0,
+          ll: parseFloat(row[2]) || 0,
+          xFt,
+          yFt
+        });
+      }
+      loadNodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    }
+    // Each row keeps its own load entries; only the node it points at is
+    // shared if another row (or a joint) already claimed that coordinate.
+    for (const n of loadNodes) n.nodeIdx = internNode(n.xFt, n.yFt, n.id, LBL_LOAD_ID);
+
+    // 3. BC matching against all nodes (optional Pin BC DXF)
+    // BC points are drawn in AutoCAD (AutoLISP) directly on top of the node
+    // coordinates, so matching is coordinate equality — no proximity search.
+    // Keyed to the nearest 1mm to absorb float-precision noise from CAD
+    // transforms (e.g. "28041.60000056092" vs "28041.6" for the same point),
+    // not to snap a pin onto a nearby-but-different node.
+    // jointIndex is already mmKey → canonical node index, so there's no second
+    // joint lookup table to build.
+    const loadMmIndex = new Map(); // mmKey → index into loadNodes
+    for (let i = 0; i < loadNodes.length; i++) loadMmIndex.set(mmKey(loadNodes[i].xFt, loadNodes[i].yFt), i);
+
+
+    // A pin that doesn't land exactly on an existing node — e.g. it's mid-span
+    // on an HSS member the DXF hasn't been split at yet — still gets a node
+    // and a boundary condition, so nothing from Pin BC DXF is ever silently
+    // lost. It's materialised as a standalone node (not framed into any
+    // member — this tool never infers where to split a member; that's a CAD
+    // job), deduped by coordinate so coincident pins share one node.
+    // Distance from a point to the nearest HSS member's length (not just its
+    // endpoints) — used only to classify an already-unconnected pin for the
+    // summary message below. Never used to snap/match a pin to a node.
+    function distToNearestMember(px, py) {
+      let min = Infinity;
+      for (const l of dxfLineEntities) {
+        const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
+        const len2 = dx * dx + dy * dy;
+        let cx, cy;
+        if (len2 === 0) { cx = l.x1; cy = l.y1; }
+        else {
+          let t = ((px - l.x1) * dx + (py - l.y1) * dy) / len2;
+          t = Math.max(0, Math.min(1, t));
+          cx = l.x1 + t * dx; cy = l.y1 + t * dy;
+        }
+        const d = Math.hypot(px - cx, py - cy);
+        if (d < min) min = d;
+      }
+      return min * 304.8; // mm
+    }
+    const MID_MEMBER_TOL_MM = 1; // CAD float-precision noise, not a search radius
+
+    const bcOnlyNodes = [];
+    const bcOnlyMmIndex = new Map(); // mmKey → index into bcOnlyNodes
+    const bcRefs = []; // { type: 'joint' | 'load' | 'bcOnly', idx }
+    const offGeometryPins = []; // subset of bcOnlyNodes that don't land on any HSS member at all
+    let pinPointCount = 0, pinPointMidMember = 0, pinPointOffGeometry = 0, pinPointDuplicates = 0;
+    if (state.pinDxf) {
+      const dxfPoints = parseDxfPoints(state.pinDxf);
+      pinPointCount = dxfPoints.length;
+      for (const pt of dxfPoints) {
+        const k = mmKey(pt.x, pt.y);
+        if (jointIndex.has(k)) { bcRefs.push({ type: 'joint', idx: jointIndex.get(k) }); continue; }
+        if (loadMmIndex.has(k)) { bcRefs.push({ type: 'load', idx: loadMmIndex.get(k) }); continue; }
+        // Joints occupy the first `jointCount` canonical indices, so limiting
+        // the scan to that prefix keeps the joint/load distinction the
+        // connected-vs-unconnected stats depend on.
+        const nearJoint = findNearNode(pt.x, pt.y, nodes, RISA_MERGE_TOL_MM, jointCount);
+        if (nearJoint !== -1) { bcRefs.push({ type: 'joint', idx: nearJoint }); continue; }
+        const nearLoad = findNearNode(pt.x, pt.y, loadNodes, RISA_MERGE_TOL_MM);
+        if (nearLoad !== -1) { bcRefs.push({ type: 'load', idx: nearLoad }); continue; }
+        let bIdx = bcOnlyMmIndex.get(k);
+        if (bIdx === undefined) {
+          bIdx = bcOnlyNodes.length;
+          bcOnlyNodes.push({ xFt: pt.x, yFt: pt.y });
+          bcOnlyMmIndex.set(k, bIdx);
+          const onMember = dxfLineEntities.length > 0 && distToNearestMember(pt.x, pt.y) < MID_MEMBER_TOL_MM;
+          if (onMember) pinPointMidMember++;
+          else { pinPointOffGeometry++; offGeometryPins.push({ xFt: pt.x, yFt: pt.y }); }
+        }
+        bcRefs.push({ type: 'bcOnly', idx: bIdx });
+      }
+    }
+    // Pin-only nodes register after joints and load nodes, so a pin that the
+    // classification above judged "unconnected" still shares a node with a
+    // notional row at the same spot rather than creating a second one.
+    const bcOnlyCanon = bcOnlyNodes.map((n, i) => internNode(n.xFt, n.yFt, 'P' + (i + 1), LBL_PIN));
+
+    // Connected BCs (on real HSS joints / load nodes) counted separately from
+    // unconnected ones (standalone bcOnly nodes) — see stat-bcs below; the
+    // R3D file itself still gets a boundary condition entry for every node
+    // either way.
+    const connectedBcIndices = [...new Set(
+      bcRefs.filter(r => r.type !== 'bcOnly')
+        .map(r => (r.type === 'joint' ? r.idx : loadNodes[r.idx].nodeIdx) + 1)
+    )];
+    const bcOnlyIndices = [...new Set(bcOnlyCanon.map(i => i + 1))];
+    // Final dedupe across both groups: a boundary condition is a property of a
+    // node, so one node gets one entry however many pins landed on it.
+    const bcIndices = [...new Set([...connectedBcIndices, ...bcOnlyIndices])];
+    // Stacked POINT entities at the same coordinate are common in CAD, and they
+    // collapse into a single boundary condition — which is why the BC count can
+    // be lower than the point count. Derived from the BCs actually written
+    // rather than from distinct coordinate keys, so it stays correct if pin
+    // matching ever resolves two different keys onto the same node.
+    pinPointDuplicates = pinPointCount > 0 ? pinPointCount - bcIndices.length : 0;
+
+    // 4. Build node lines (nodeSection built after notional nodes are parsed below)
+    const Z0 = '0.000000000000e+00';
+    const NJ  = jointCount;
+    const NL  = loadNodes.length;
+    const NBC = bcOnlyNodes.length;
+
+    const bcLines = bcIndices.map(idx =>
+      `${idx} 4 4 4 0 0 0 0 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 -1 -1 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0 0;`
+    );
+    const bcSection = [
+      `[BOUNDARY_CONDITIONS] <${bcIndices.length}>`,
+      ...bcLines,
+      '[END_BOUNDARY_CONDITIONS]'
+    ].join('\n');
+
+    // P1001_7FT — HSS section (HR Steel, type=2 column/brace, material 65563)
+    const MF     = '0 0.000000 -1 0 0 2 0 0 0.000000 0.000000 1 0 65563 0 -1 -1 -1 1 0.000000 0 0 0 0 0 0.000000 0.000000 0.000000 0.000000 "                                " "                                " 0.000000 "                                " 0.000000 0';
+    const DP     = '1 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 0 0 0 -1.000000 -1.000000 -1.000000 -1.000000 0.000000 0.000000 "Optimize                        " "Optimize                        " -1.000000 0.000000 -1.000000 0 0 0.000000 0.000000 0.000000 0.000000 0 0';
+    // 2C4X5.4X6 — Double Channel beam (A36 Gr.36, type=1 beam, material 19)
+    const MF_2C4 = '0 0.000000 -1 0 0 1 1 0 0.000000 0.000000 1 0 19 0 -1 -1 -1 1 0.000000 1 0 0 0 0 0.000000 0.000000 0.000000 0.000000 "                                " "                                " 0.000000 "                                " 0.000000 0';
+    const DP_2C4 = '1 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 0 0 0 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 "Optimize                        " "Optimize                        " -1.000000 0.000000 -1.000000 0 0 0.000000 0.000000 0.000000 0.000000 0 0';
+    const mNames = members.map((_, i) => pad32('M' + (i + 1)));
+
+    const membersSection = [
+      '[MEMBERS]', '',
+      `[.MEMBERS_MAIN_DATA] <${members.length}>`,
+      ...members.map((m, i) => {
+        const is2C = m.layer === '2C4X5.4X6';
+        return `"${mNames[i]}" ${is2C ? '"Double Channel                  "' : '"None                            "'} "${pad32(is2C ? '2C4X5.4X6' : 'P1001_7FT')}" ${m.nodeI} ${m.nodeJ} ${is2C ? MF_2C4 : MF};`;
+      }),
+      '[.END_MEMBERS_MAIN_DATA]', '',
+      `[.MEMBERS_DESIGN_PARAMETERS] <${members.length}>`,
+      ...members.map((m, i) => `"${mNames[i]}" ${m.layer === '2C4X5.4X6' ? DP_2C4 : DP};`),
+      '[.END_MEMBERS_DESIGN_PARAMETERS]', '',
+      `[.MEMBERS_BRB_DATA] <${members.length}>`,
+      ...members.map((_, i) => `"${mNames[i]}" 38.000000 46.000000 0 -1.000000 -1.000000 -1.000000 -1.000000;`),
+      '[.END_MEMBERS_BRB_DATA]', '',
+      `[.MEMBERS_SUPPLEMENTARY_DATA] <${members.length}>`,
+      ...members.map((_, i) => `"${mNames[i]}" 1 0 0 -1 -1 917503 -1 "${uuidv4()}" 0 0 0 "                                ";`),
+      '[.END_MEMBERS_SUPPLEMENTARY_DATA]', '',
+      `[.MEMBERS_DETAILING_DATA] <${members.length}>`,
+      ...members.map((_, i) => `"${mNames[i]}" 10 0.000000 0.000000 0.000000 10 0.000000 0.000000 0.000000;`),
+      '[.END_MEMBERS_DETAILING_DATA]', '',
+      `[.MEMBERS_DESIGN_CALCMODE_PARAMETERS] <${members.length}>`,
+      ...members.map(() => '-1 -1 0 0 -1.000000 -1.000000 | 0 | 0 | 0 | 0 | 0 | 0 | 0 0.000000 0.000000 -1.000000 0.000000 0 0 0 0 0;'),
+      '[.END_MEMBERS_DESIGN_CALCMODE_PARAMETERS]', '',
+      '[END_MEMBERS]'
+    ].join('\n');
+
+    // 4. Parse all NOs.csv → notional load nodes grouped by case (optional)
+    // TODO: Notional load magnitudes are set to 0 — user must input values in RISA after import
+    const notrNodes = [], notlNodes = [], nolrNodes = [], nollNodes = [];
+    const unknownNotionalLayers = new Map(); // layer name → row count
+    if (state.nosCsv) {
+      const nosRows = parseCSV(state.nosCsv);
+      for (let i = 1; i < nosRows.length; i++) {
+        const row = nosRows[i];
+        const label = (row[0] || '').trim();
+        const layer = (row[1] || '').trim().toUpperCase();
+        const xFt = parseFloat(row[2]) / 304.8;
+        const yFt = parseFloat(row[3]) / 304.8;
+        if (!label || isNaN(xFt) || isNaN(yFt)) continue;
+        const node = { label, xFt, yFt };
+        if (layer === 'NOTR') notrNodes.push(node);
+        else if (layer === 'NOTL') notlNodes.push(node);
+        else if (layer === 'NOLR') nolrNodes.push(node);
+        else if (layer === 'NOLL') nollNodes.push(node);
+        // Anything else is a layer this tool has no load case for — usually a
+        // typo in AutoCAD. Previously it fell through the chain and vanished
+        // with no trace; now it's counted and named in the summary.
+        else unknownNotionalLayers.set(layer || '(blank)', (unknownNotionalLayers.get(layer || '(blank)') || 0) + 1);
+      }
+    }
+    const notionalNodes = [...notrNodes, ...notlNodes, ...nolrNodes, ...nollNodes];
+    const NN = notionalNodes.length;
+    // Registered last. A notional row sharing a coordinate with a load node
+    // merges into it — the surviving node then carries both the gravity loads
+    // (cases 1-2) and this notional entry (cases 3-6), which is the whole
+    // point: one node, every load value kept.
+    for (const n of notionalNodes) n.nodeIdx = internNode(n.xFt, n.yFt, n.label, LBL_NOTIONAL);
+
+    // Node table is complete — emit it once, in canonical order.
+    const nodeSection = [
+      `[NODES] <${nodes.length}>`,
+      ...nodes.map(n =>
+        `"${pad32(n.label)}"   ${toR3D(n.xFt)}   ${toR3D(n.yFt)}   ${Z0}   ${Z0} 917503 0 0 -1 -1 0;`
+      ),
+      '[END_NODES]'
+    ].join('\n');
+
+    // A row whose magnitude rounds to 0 produces no load entry — a zero-force
+    // load does nothing structurally. Counted so the summary can explain why
+    // the load count is lower than the CSV row count. (Notional loads are the
+    // deliberate exception: those ARE written at 0 for editing in RISA.)
+    const dlLoads = loadNodes.filter(n => Math.round(n.dl) !== 0);
+    const llLoads = loadNodes.filter(n => Math.round(n.ll) !== 0);
+    const zeroDlRows = loadNodes.length - dlLoads.length;
+    const zeroLlRows = loadNodes.length - llLoads.length;
+    // Every load entry points at its node's canonical index. Two rows that
+    // merged onto one node keep both entries — RISA sums them — so no value is
+    // dropped and both persistent IDs stay traceable.
+    const notrLoadLines = notrNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
+    const notlLoadLines = notlNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
+    const nolrLoadLines = nolrNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
+    const nollLoadLines = nollNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
+
+    const loadCasesSection = [
+      '[BASIC_LOAD_CASES] <6>',
+      `1 "DL                              " ${dlLoads.length} 0 0 0 0 0 1 0.000000 0.000000 -1.000000 -1 1.000000 1;`,
+      `2 "LL                              " ${llLoads.length} 0 0 0 0 0 2 0.000000 0.000000 0.000000 -1 1.000000 2;`,
+      `3 "NoTR                            " ${notrNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `4 "NoTL                            " ${notlNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `5 "NoLR                            " ${nolrNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `6 "NoLL                            " ${nollNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      '[END_BASIC_LOAD_CASES]'
+    ].join('\n');
+
+    const totalLoads = dlLoads.length + llLoads.length + NN;
+    const loadLines = [
+      ...dlLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`),
+      ...llLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`),
+      ...notrLoadLines, ...notlLoadLines, ...nolrLoadLines, ...nollLoadLines
+    ];
+    const loadSection = [
+      `[NODE_LOADS] <${totalLoads}>`,
+      ...loadLines,
+      '[END_NODE_LOADS]'
+    ].join('\n');
+
+    // 5. Validation
+    const warnings = [];
+    if (dxfLineEntities.length === 0)
+      warnings.push('No LINE entities found in HSS DXF — check that the correct file was loaded');
+    if (jointCount === 0)
+      warnings.push('No joint nodes were generated — DXF may be empty or malformed');
+    if (state.csv && loadNodes.length === 0)
+      warnings.push('No valid rows found in Matched Load CSV — check column order (Persistent, Dead load, Live load, X_mm, Y_mm)');
+    if (pinPointMidMember > 0)
+      warnings.push(`${pinPointMidMember} of ${pinPointCount} Pin BC points sit mid-length on an HSS member (not at a drawn joint) — this is a normal support location, added as a standalone node (Boundaries: +${pinPointMidMember}). Re-export HSS ONLY.dxf from AutoCAD with members split at these points if you want them framed into the model.`);
+    if (pinPointOffGeometry > 0)
+      warnings.push(`${pinPointOffGeometry} of ${pinPointCount} Pin BC points don't land on or along any HSS/Load geometry at all — worth checking these for a misplaced point (Boundaries: +${pinPointOffGeometry}). Added as standalone nodes — see Download Unconnected Pins DXF`);
+    if (badLoadRows > 0)
+      warnings.push(`${badLoadRows} Matched Load CSV row${badLoadRows === 1 ? '' : 's'} had a blank or non-numeric X_mm/Y_mm coordinate and ${badLoadRows === 1 ? 'was' : 'were'} skipped — check columns 4 and 5. Their loads are NOT in the model.`);
+    if (unknownNotionalLayers.size > 0) {
+      const detail = [...unknownNotionalLayers.entries()].map(([l, n]) => `"${l}" ×${n}`).join(', ');
+      const total = [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0);
+      warnings.push(`${total} all NOs.csv row${total === 1 ? '' : 's'} skipped — layer not recognised: ${detail}. Expected NOTR, NOTL, NOLR or NOLL (case-insensitive). Their notional loads are NOT in the model.`);
+    }
+
+    // 6. Assemble output
+    const output =
+      R3D_HEADER +
+      nodeSection + '\n\n\n' +
+      bcSection + '\n\n\n' +
+      R3D_SHAPES + '\n\n' +
+      membersSection + '\n\n\n' +
+      loadCasesSection + '\n\n\n' +
+      loadSection + '\n\n\n' +
+      R3D_TAIL;
+
+    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
+  }
+
+  // === CORE-END ===
+
+  // ---------------------------------------------------------------------------
+  // Unconnected-pins DXF — a marker at every Pin BC point that got a
+  // standalone node instead of landing on real HSS/Load geometry, so the
+  // user can locate them in AutoCAD and split the relevant member there
+  // (this tool never infers where to split — that stays a CAD job).
+  // ---------------------------------------------------------------------------
+  function buildUnconnectedPinsDxf(unconnectedPins) {
+    // A plain POINT entity per pin — the user sets AutoCAD's PDMODE/point
+    // style themselves, so this doesn't draw its own marker geometry.
+    const entities = unconnectedPins.map(pt => {
+      const xMm = pt.xFt * 304.8, yMm = pt.yFt * 304.8;
+      return `0\nPOINT\n8\nUNCONNECTED_PINS\n10\n${xMm}\n20\n${yMm}\n30\n0.0`;
+    });
+    return `0\nSECTION\n2\nENTITIES\n${entities.join('\n')}\n0\nENDSEC\n0\nEOF\n`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Button handlers
+  // ---------------------------------------------------------------------------
+  document.getElementById('btn-generate').addEventListener('click', () => {
+    document.getElementById('summary-card').classList.remove('visible');
+    document.getElementById('error-bar').classList.remove('visible');
+    try {
+      const result = generate();
+      state.output = result.text;
+      state.unconnectedPins = result.unconnectedPins;
+
+      // Populate summary card
+      document.getElementById('stat-joints').textContent    = result.joints + (result.bcOnlyNodes ? ` +${result.bcOnlyNodes}` : '');
+      document.getElementById('stat-members').textContent   = result.members;
+      document.getElementById('stat-loadnodes').textContent = result.loadNodes;
+      document.getElementById('stat-bcs').textContent       = result.bcs + (result.bcOnlyNodes ? ` +${result.bcOnlyNodes}` : '');
+      document.getElementById('stat-loads').textContent     = result.loads;
+      document.getElementById('stat-notional').textContent  = result.notionalNodes || '—';
+
+      const warningsArea = document.getElementById('warnings-area');
+      if (result.warnings.length > 0) {
+        // Built as DOM nodes, not innerHTML: warnings can quote text taken
+        // straight from a CSV (e.g. an unrecognised layer name), and textContent
+        // escapes it inherently.
+        warningsArea.replaceChildren(...result.warnings.map(w => {
+          const chip = document.createElement('div');
+          chip.className = 'warning-chip';
+          chip.textContent = w;
+          return chip;
+        }));
+        warningsArea.style.display = 'flex';
+      } else {
+        warningsArea.style.display = 'none';
+      }
+
+      const notionalNote = document.getElementById('notional-note');
+      notionalNote.style.display = result.notionalNodes ? 'flex' : 'none';
+
+      const pinMatchNote = document.getElementById('pin-match-note');
+      if (result.pinPointCount > 0 && result.bcs > 0) {
+        pinMatchNote.textContent = `ℹ ${result.bcs} of ${result.pinPointCount} Pin BC points landed exactly on an HSS member endpoint (drawn joint) or Load node — attached directly, no standalone node needed.`;
+        pinMatchNote.style.display = 'flex';
+      } else {
+        pinMatchNote.style.display = 'none';
+      }
+
+      // Reconciliation notes — these explain why a written count is lower than
+      // the input count, so the summary numbers add up without hand-checking.
+      const dupPinNote = document.getElementById('dup-pin-note');
+      if (result.pinPointDuplicates > 0) {
+        const unique = result.pinPointCount - result.pinPointDuplicates;
+        dupPinNote.textContent = `ℹ ${result.pinPointDuplicates} of ${result.pinPointCount} Pin BC points are stacked on an already-used coordinate — each collapses into the same boundary condition, so ${unique} unique boundaries were written. Normal for duplicated CAD points, no action needed.`;
+        dupPinNote.style.display = 'flex';
+      } else {
+        dupPinNote.style.display = 'none';
+      }
+
+      const mergedNodesNote = document.getElementById('merged-nodes-note');
+      const totalMerged = result.nodesMerged + result.jointNoiseMerged;
+      if (totalMerged > 0) {
+        const parts = [];
+        if (result.jointNoiseMerged > 0) parts.push(`${result.jointNoiseMerged} duplicate HSS joint${result.jointNoiseMerged === 1 ? '' : 's'} from CAD coordinate noise`);
+        if (result.nodesMerged > 0) parts.push(`${result.nodesMerged} coincident load/pin/notional node${result.nodesMerged === 1 ? '' : 's'}`);
+        mergedNodesNote.textContent = `ℹ ${totalMerged} coincident node${totalMerged === 1 ? '' : 's'} merged (${parts.join('; ')}) — ${result.totalNodes} unique nodes written. Load values and boundary conditions were carried onto the surviving node, so nothing was lost; this is what stops RISA reporting duplicates on Model Merge.`;
+        mergedNodesNote.style.display = 'flex';
+      } else {
+        mergedNodesNote.style.display = 'none';
+      }
+
+      const zeroLoadNote = document.getElementById('zero-load-note');
+      const zeroParts = [];
+      if (result.zeroDlRows > 0) zeroParts.push(`${result.zeroDlRows} with Dead load 0`);
+      if (result.zeroLlRows > 0) zeroParts.push(`${result.zeroLlRows} with Live load 0`);
+      if (zeroParts.length > 0) {
+        zeroLoadNote.textContent = `ℹ Of ${result.loadNodes} load rows, ${zeroParts.join(' and ')} — no load entry is written for a zero magnitude, so the load count is lower than the row count. (Notional loads are the exception: those are written at 0 on purpose for editing in RISA.)`;
+        zeroLoadNote.style.display = 'flex';
+      } else {
+        zeroLoadNote.style.display = 'none';
+      }
+
+      document.getElementById('summary-card').classList.add('visible');
+      document.getElementById('btn-download').classList.add('visible');
+      document.getElementById('btn-download-unconnected').classList.toggle('visible', result.unconnectedPins.length > 0);
+    } catch (e) {
+      const bar = document.getElementById('error-bar');
+      bar.textContent = '✕  ' + e.message;
+      bar.classList.add('visible');
+      console.error(e);
+    }
+  });
+
+  document.getElementById('btn-download').addEventListener('click', () => {
+    if (!state.output) return;
+    const blob = new Blob([state.output], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'output.r3d';
+    a.click();
+  });
+
+  document.getElementById('btn-download-unconnected').addEventListener('click', () => {
+    if (!state.unconnectedPins || state.unconnectedPins.length === 0) return;
+    const blob = new Blob([buildUnconnectedPinsDxf(state.unconnectedPins)], { type: 'application/dxf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'unconnected-pins.dxf';
+    a.click();
+  });
+
+  // ===========================================================================
+  // Combine Load Files — merge multiple per-structure load exports into one .xlsx
+  // ===========================================================================
+  //
+  // Output schema, verified cell-for-cell against the reference workbook by
+  // tools/merge-harness.mjs — run it after touching anything below.
+  //   X / Z / Y pass through the source's own columns; only where a source
+  //     lacks them do they fall back to round(uscX,2) / round(uscZ,2) and, for
+  //     Y, -round(uscY,2). The usc frame's Y points opposite the model
+  //     frame's, so deriving Y from uscY silently drops the minus sign.
+  //   X,mm = uscX*25.4     Y,mm = uscY*25.4     (full precision)
+  //   Persistent Identifier is always <structure code>_<seq>; source IDs are
+  //     discarded (the reference renumbers 2220's GUIDs to 2220_1…2220_300).
+  //   F_Ev/F_Eh default to 0; AZS info / MC pass through (blank if absent)
+  //   .scr is the AutoCAD form "._POINT <X,mm>,<Y,mm>", with the coordinates
+  //     rendered at 15 significant digits to match Excel's number-to-text rule
+  //     — the reference built that column with ="._POINT " & N & "," & O.
+  //     (the legacy All Loads file emitted "._POINT uscZ,AZS" — a bug we do not reproduce)
+  //   N1/O1/P1 are left blank, as the reference has no labels for them.
+  //
+  // === MERGE-CORE-START === (tools/merge-harness.mjs extracts between these
+  // markers to run the merge in Node — same trick as CORE-START/END above.)
+  const OUT_COLUMNS = ['Persistent Identifier','X','Z','Y','Dead load','Live load',
+    'F_Ev','F_Eh','uscX','uscY','uscZ','AZS info','MC','X,mm','Y,mm','.scr'];
+  const TEXT_COLS = new Set(['Persistent Identifier','AZS info','MC','.scr']);
+
+  const mergeState = { files: [], output: null };
+
+  function normHeader(h){ return String(h).trim().toLowerCase().replace(/\s+/g,' '); }
+  const HEADER_MAP = {
+    'persistent identifier':'id','id':'id',
+    'uscx':'uscX','uscy':'uscY','uscz':'uscZ',
+    'x':'X','z':'Z','y':'Y',
+    'dead load':'dl','dl':'dl',
+    'live load':'ll','ll':'ll',
+    'f_ev':'fev','fev':'fev','f_eh':'feh','feh':'feh',
+    'azs info':'azs','azs':'azs','mc':'mc'
+  };
+
+  function xmlEsc(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function round2(v){ const n=parseFloat(v); return isFinite(n)?String(parseFloat(n.toFixed(2))):v; }
+  function mmFrom(v){ const n=parseFloat(v); return isFinite(n)?String(n*25.4):''; }
+  function negate(v){ const n=parseFloat(v); return isFinite(n)?String(-n):v; }
+  // Excel renders a number as text with at most 15 significant digits. The
+  // reference .scr column was produced by ="._POINT " & N & "," & O, so matching
+  // Excel's precision is what makes the string identical — JS's default
+  // shortest-round-trip repr differs in the last two digits.
+  function excelText(v){ const n=parseFloat(v); return isFinite(n)?String(parseFloat(n.toPrecision(15))):''; }
+
+  // --- Delimited text (.csv or tab-delimited .xls) --------------------------
+  function parseDelimited(text){
+    const nl=text.indexOf('\n');
+    const firstLine=text.slice(0, nl>=0?nl:text.length);
+    const delim=(firstLine.split('\t').length > firstLine.split(',').length) ? '\t' : ',';
+    const lines=text.replace(/\r\n?/g,'\n').split('\n');
+    const rows=[];
+    for(const line of lines){
+      if(line==='') continue;
+      const cells=[]; let cur='', q=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(q){ if(ch=='"'){ if(line[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+        else { if(ch=='"') q=true; else if(ch===delim){cells.push(cur);cur='';} else cur+=ch; }
+      }
+      cells.push(cur);
+      rows.push(cells);
+    }
+    return rows;
+  }
+
+  // --- Real .xlsx reader (ZIP central directory + inflate) -------------------
+  function colIdx(ref){ const m=/^([A-Z]+)/.exec(ref); let n=0; for(const ch of m[1]) n=n*26+(ch.charCodeAt(0)-64); return n-1; }
+  const nsEls=(p,name)=>p.getElementsByTagNameNS('*',name);
+
+  async function readXlsx(buf){
+    const u8=new Uint8Array(buf), dv=new DataView(buf);
+    let eocd=-1;
+    for(let i=u8.length-22;i>=0;i--){ if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+    if(eocd<0) throw new Error('Not a valid .xlsx (missing ZIP directory)');
+    const cdCount=dv.getUint16(eocd+10,true);
+    let off=dv.getUint32(eocd+16,true);
+    const entries={};
+    for(let n=0;n<cdCount;n++){
+      if(dv.getUint32(off,true)!==0x02014b50) break;
+      const method=dv.getUint16(off+10,true);
+      const compSize=dv.getUint32(off+20,true);
+      const fnLen=dv.getUint16(off+28,true);
+      const extraLen=dv.getUint16(off+30,true);
+      const cmtLen=dv.getUint16(off+32,true);
+      const lho=dv.getUint32(off+42,true);
+      const name=new TextDecoder().decode(u8.subarray(off+46, off+46+fnLen));
+      entries[name]={method,compSize,lho};
+      off+=46+fnLen+extraLen+cmtLen;
+    }
+    async function extract(name){
+      const e=entries[name]; if(!e) return null;
+      const lfn=dv.getUint16(e.lho+26,true), lex=dv.getUint16(e.lho+28,true);
+      const start=e.lho+30+lfn+lex;
+      const data=u8.subarray(start, start+e.compSize);
+      if(e.method===0) return new TextDecoder().decode(data);
+      const ds=new DecompressionStream('deflate-raw');
+      const stream=new Response(data.slice()).body.pipeThrough(ds);
+      const outBuf=await new Response(stream).arrayBuffer();
+      return new TextDecoder().decode(new Uint8Array(outBuf));
+    }
+    const shared=[];
+    const ssXml=await extract('xl/sharedStrings.xml');
+    if(ssXml){
+      const doc=new DOMParser().parseFromString(ssXml,'application/xml');
+      for(const si of nsEls(doc,'si')){
+        let s=''; for(const t of nsEls(si,'t')) s+=t.textContent; shared.push(s);
+      }
+    }
+    const sheetName=Object.keys(entries)
+      .filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort()[0];
+    if(!sheetName) throw new Error('No worksheet found in .xlsx');
+    const doc=new DOMParser().parseFromString(await extract(sheetName),'application/xml');
+    const rows=[];
+    for(const row of nsEls(doc,'row')){
+      const map={}; let maxi=-1;
+      for(const c of nsEls(row,'c')){
+        const ci=colIdx(c.getAttribute('r')); const t=c.getAttribute('t');
+        const vEl=nsEls(c,'v')[0], isEl=nsEls(c,'is')[0];
+        let v='';
+        if(t==='s' && vEl) v=shared[parseInt(vEl.textContent)]??'';
+        else if(isEl){ for(const t2 of nsEls(isEl,'t')) v+=t2.textContent; }
+        else if(vEl) v=vEl.textContent;
+        map[ci]=v; if(ci>maxi) maxi=ci;
+      }
+      const cells=[]; for(let i=0;i<=maxi;i++) cells.push(map[i]??'');
+      rows.push(cells);
+    }
+    return rows;
+  }
+
+  // --- Parse a dropped file into normalized records -------------------------
+  async function parseLoadFile(file){
+    const name=file.name;
+    const ext=name.slice(name.lastIndexOf('.')+1).toLowerCase();
+    let rows;
+    if(ext==='xlsx'){
+      rows=await readXlsx(await file.arrayBuffer());
+    } else {
+      const head=new Uint8Array(await file.slice(0,8).arrayBuffer());
+      if(ext==='xls' && head[0]===0xD0 && head[1]===0xCF)
+        throw new Error('Legacy binary .xls not supported — re-save as .xlsx or .csv');
+      rows=parseDelimited(await file.text());
+    }
+    if(!rows.length) throw new Error('File is empty');
+    const field=rows[0].map(h=>HEADER_MAP[normHeader(h)]||null);
+    const idxOf=f=>field.indexOf(f);
+    const iId=idxOf('id');
+    const iUX=idxOf('uscX'), iUY=idxOf('uscY'), iUZ=idxOf('uscZ');
+    const iX=idxOf('X'), iZ=idxOf('Z'), iY=idxOf('Y');
+    const iDL=idxOf('dl'), iLL=idxOf('ll');
+    const iFev=idxOf('fev'), iFeh=idxOf('feh'), iAzs=idxOf('azs'), iMC=idxOf('mc');
+    if((iUX<0||iUY<0||iUZ<0) && (iX<0||iY<0||iZ<0))
+      throw new Error('No coordinate columns (need uscX/uscY/uscZ or X/Z/Y)');
+    const get=(r,i)=> i>=0 ? (r[i]??'') : '';
+    const records=[];
+    for(let ri=1;ri<rows.length;ri++){
+      const r=rows[ri];
+      if(!r || r.every(c=>String(c).trim()==='')) continue;
+      // Source X/Z/Y are captured before the usc fallback below can overwrite
+      // them: the usc frame's Y points opposite the model frame's, so uscY
+      // reads +2962.34 where the source Y column reads -2962.34. Deriving Y
+      // from uscY drops that sign; passing the source column through cannot.
+      const sx=get(r,iX), sz=get(r,iZ), sy=get(r,iY);
+      let ux=get(r,iUX), uy=get(r,iUY), uz=get(r,iUZ);
+      if(ux===''&&iX>=0) ux=get(r,iX);
+      if(uy===''&&iY>=0) uy=get(r,iY);
+      if(uz===''&&iZ>=0) uz=get(r,iZ);
+      if(ux===''||uy===''||uz==='') continue;
+      records.push({ id:get(r,iId), ux, uy, uz, x:sx, z:sz, y:sy,
+        dl:get(r,iDL), ll:get(r,iLL),
+        fev:get(r,iFev), feh:get(r,iFeh), azs:get(r,iAzs), mc:get(r,iMC) });
+    }
+    if(!records.length) throw new Error('No usable data rows');
+    const missing=[];
+    if(iFev<0||iFeh<0) missing.push('F_Ev/F_Eh→0');
+    if(iAzs<0) missing.push('AZS info→blank');
+    if(iMC<0)  missing.push('MC→blank');
+    const dot=name.lastIndexOf('.');
+    const stem=(dot>0?name.slice(0,dot):name).trim();
+    const dm=/^(\d+)/.exec(stem);
+    return { name, code: dm?dm[1]:stem, records, missing };
+  }
+
+  // --- Assemble combined 16-column rows -------------------------------------
+  function buildCombined(){
+    const files=[...mergeState.files].filter(f=>!f.error && f.records.length)
+      .sort((a,b)=>{
+        const na=/^\d+$/.test(a.code), nb=/^\d+$/.test(b.code);
+        return (na&&nb) ? Number(a.code)-Number(b.code) : a.code.localeCompare(b.code);
+      });
+    if(!files.length) throw new Error('No valid files to combine');
+    // The reference workbook leaves N1/O1/P1 empty: those three columns were
+    // bolted onto a raw export by hand and never got labels. OUT_COLUMNS keeps
+    // the names because buildSheetXml keys text-vs-number typing off them.
+    const rows=[OUT_COLUMNS.map((c,i)=>i>=13?'':c)];
+    // Sequence counters are keyed by structure code, not reset per file, so two
+    // files resolving to the same code ("2220.xls" and "2220 rev B.xls" — the
+    // filename dedupe only catches identical names) continue the numbering
+    // instead of both starting at _1 and duplicating every identifier. A single
+    // file is unaffected: it still numbers straight from _1.
+    const seq=new Map();
+    for(const f of files){
+      f.records.forEach(rec=>{
+        const n=(seq.get(f.code)||0)+1; seq.set(f.code,n);
+        const mmX=mmFrom(rec.ux), mmY=mmFrom(rec.uy);
+        rows.push([
+          `${f.code}_${n}`,
+          rec.x!==''?rec.x:round2(rec.ux),
+          rec.z!==''?rec.z:round2(rec.uz),
+          rec.y!==''?rec.y:negate(round2(rec.uy)),
+          rec.dl, rec.ll,
+          rec.fev!==''?rec.fev:'0', rec.feh!==''?rec.feh:'0',
+          rec.ux, rec.uy, rec.uz,
+          rec.azs, rec.mc,
+          mmX, mmY,
+          `._POINT ${excelText(mmX)},${excelText(mmY)}`
+        ]);
+      });
+    }
+    return { rows, count: rows.length-1, files };
+  }
+
+  // --- Minimal .xlsx writer (ZIP store + CRC32) -----------------------------
+  const CRC_TABLE=(()=>{const t=new Uint32Array(256);
+    for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}
+    return t;})();
+  function crc32(u8){ let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c=CRC_TABLE[(c^u8[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+
+  function colName(i){ let s=''; i++; while(i>0){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=(i-m-1)/26; } return s; }
+  function buildSheetXml(rows){
+    let body='';
+    rows.forEach((row,ri)=>{
+      const rn=ri+1; let cells='';
+      row.forEach((val,ci)=>{
+        const ref=colName(ci)+rn;
+        const sval=String(val);
+        // Keyed off the schema, not off rows[0]: the emitted header row blanks
+        // N1/O1/P1, so looking the column name up in the output would stop
+        // recognising .scr as text.
+        const numeric = ri>0 && !TEXT_COLS.has(OUT_COLUMNS[ci]) && /^-?\d+(\.\d+)?$/.test(sval.trim()) && sval.trim()!=='';
+        if(sval==='') cells+=`<c r="${ref}"/>`;
+        else if(numeric) cells+=`<c r="${ref}"><v>${xmlEsc(sval)}</v></c>`;
+        else cells+=`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(sval)}</t></is></c>`;
+      });
+      body+=`<row r="${rn}">${cells}</row>`;
+    });
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+  }
+
+  function zipStore(files){
+    const enc=new TextEncoder(); const chunks=[]; let offset=0; const dir=[];
+    const push=u8=>{ chunks.push(u8); offset+=u8.length; };
+    for(const e of files){
+      const nb=enc.encode(e.name), crc=crc32(e.data), sz=e.data.length;
+      const lh=new Uint8Array(30+nb.length); const dv=new DataView(lh.buffer);
+      dv.setUint32(0,0x04034b50,true); dv.setUint16(4,20,true); dv.setUint16(6,0,true);
+      dv.setUint16(8,0,true); dv.setUint16(10,0,true); dv.setUint16(12,0,true);
+      dv.setUint32(14,crc,true); dv.setUint32(18,sz,true); dv.setUint32(22,sz,true);
+      dv.setUint16(26,nb.length,true); dv.setUint16(28,0,true); lh.set(nb,30);
+      const localOffset=offset; push(lh); push(e.data);
+      dir.push({nb,crc,sz,localOffset});
+    }
+    const cdStart=offset;
+    for(const r of dir){
+      const ch=new Uint8Array(46+r.nb.length); const dv=new DataView(ch.buffer);
+      dv.setUint32(0,0x02014b50,true); dv.setUint16(4,20,true); dv.setUint16(6,20,true);
+      dv.setUint32(16,r.crc,true); dv.setUint32(20,r.sz,true); dv.setUint32(24,r.sz,true);
+      dv.setUint16(28,r.nb.length,true); dv.setUint32(42,r.localOffset,true); ch.set(r.nb,46);
+      push(ch);
+    }
+    const cdSize=offset-cdStart;
+    const eo=new Uint8Array(22); const dv=new DataView(eo.buffer);
+    dv.setUint32(0,0x06054b50,true); dv.setUint16(8,dir.length,true); dv.setUint16(10,dir.length,true);
+    dv.setUint32(12,cdSize,true); dv.setUint32(16,cdStart,true); push(eo);
+    const out=new Uint8Array(offset); let p=0; for(const c of chunks){ out.set(c,p); p+=c.length; }
+    return out;
+  }
+
+  function buildXlsxBytes(rows){
+    const enc=new TextEncoder();
+    const sheet=buildSheetXml(rows);
+    const ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`;
+    const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+    const wb=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="All Loads" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+    const wbRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`;
+    return zipStore([
+      {name:'[Content_Types].xml', data:enc.encode(ct)},
+      {name:'_rels/.rels', data:enc.encode(rels)},
+      {name:'xl/workbook.xml', data:enc.encode(wb)},
+      {name:'xl/_rels/workbook.xml.rels', data:enc.encode(wbRels)},
+      {name:'xl/worksheets/sheet1.xml', data:enc.encode(sheet)}
+    ]);
+  }
+  // === MERGE-CORE-END ===
+
+  // --- UI wiring ------------------------------------------------------------
+  const mergeZone=document.getElementById('merge-zone');
+  const mergeInput=document.getElementById('merge-input');
+  mergeZone.addEventListener('dragover',e=>{ e.preventDefault(); mergeZone.classList.add('dragover'); });
+  mergeZone.addEventListener('dragleave',()=>mergeZone.classList.remove('dragover'));
+  mergeZone.addEventListener('drop',e=>{ e.preventDefault(); mergeZone.classList.remove('dragover'); addMergeFiles(e.dataTransfer.files); });
+  mergeInput.addEventListener('change',e=>{ addMergeFiles(e.target.files); mergeInput.value=''; });
+
+  async function addMergeFiles(fileList){
+    for(const file of fileList){
+      if(mergeState.files.some(f=>f.name===file.name)) continue; // skip duplicate drops
+      try { mergeState.files.push(await parseLoadFile(file)); }
+      catch(err){ mergeState.files.push({name:file.name, code:'', records:[], missing:[], error:err.message}); }
+    }
+    mergeState.output=null;
+    document.getElementById('btn-merge-download').classList.remove('visible');
+    renderMergeFiles();
+  }
+
+  function renderMergeFiles(){
+    const list=document.getElementById('merge-filelist');
+    list.innerHTML=mergeState.files.map((f,i)=>{
+      if(f.error)
+        return `<span class="merge-file-chip invalid" title="${xmlEsc(f.error)}">⚠ ${xmlEsc(f.name)} <button class="chip-remove" data-i="${i}">✕</button></span>`;
+      return `<span class="merge-file-chip">${xmlEsc(f.name)} <span class="chip-count">${f.records.length}</span> <button class="chip-remove" data-i="${i}">✕</button></span>`;
+    }).join('');
+    list.querySelectorAll('.chip-remove').forEach(b=>b.addEventListener('click',()=>{
+      mergeState.files.splice(parseInt(b.dataset.i),1);
+      mergeState.output=null;
+      document.getElementById('btn-merge-download').classList.remove('visible');
+      renderMergeFiles();
+    }));
+    mergeZone.classList.toggle('loaded', mergeState.files.length>0);
+    const valid=mergeState.files.filter(f=>!f.error && f.records.length);
+    document.getElementById('btn-merge').disabled = valid.length<1;
+  }
+
+  function renderMergePreview(rows,count,files){
+    const box=document.getElementById('merge-preview');
+    const head=rows[0], body=rows.slice(1,13);
+    let html='<div class="merge-preview-scroll"><table class="merge-table"><thead><tr>'
+      + head.map(h=>`<th>${xmlEsc(h)}</th>`).join('') + '</tr></thead><tbody>'
+      + body.map(r=>'<tr>'+r.map(c=>`<td>${xmlEsc(c)}</td>`).join('')+'</tr>').join('')
+      + '</tbody></table></div>';
+    html+=`<div class="merge-total">Combined <b>${files.length}</b> file(s) → <b>${count}</b> load nodes. Showing first ${Math.min(12,count)} rows.</div>`;
+    box.classList.add('has-content');
+    box.innerHTML=html;
+  }
+
+  document.getElementById('btn-merge').addEventListener('click',()=>{
+    const warnBox=document.getElementById('merge-warnings');
+    try{
+      const {rows,count,files}=buildCombined();
+      mergeState.output=buildXlsxBytes(rows);
+      renderMergePreview(rows,count,files);
+      const warns=[];
+      files.forEach(f=>{ if(f.missing&&f.missing.length) warns.push(`${f.name}: filled ${f.missing.join(', ')}`); });
+      if(warns.length){ warnBox.innerHTML=warns.map(w=>`<div class="warning-chip">${xmlEsc(w)}</div>`).join(''); warnBox.style.display='flex'; }
+      else warnBox.style.display='none';
+      document.getElementById('btn-merge-download').classList.add('visible');
+    }catch(e){
+      warnBox.innerHTML=`<div class="warning-chip">✕ ${xmlEsc(e.message)}</div>`;
+      warnBox.style.display='flex';
+      console.error(e);
+    }
+  });
+
+  document.getElementById('btn-merge-download').addEventListener('click',()=>{
+    if(!mergeState.output) return;
+    const blob=new Blob([mergeState.output],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='All Loads.xlsx';
+    a.click();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Dark / light mode toggle
+  // ---------------------------------------------------------------------------
+  const themeToggle = document.getElementById('theme-toggle');
+  const themeIcon   = document.getElementById('theme-icon');
+
+  function applyTheme(dark) {
+    document.body.classList.toggle('dark', dark);
+    themeIcon.textContent = dark ? '☽' : '☀';
+    localStorage.setItem('r3d-theme', dark ? 'dark' : 'light');
+  }
+
+  themeToggle.addEventListener('click', () => {
+    applyTheme(!document.body.classList.contains('dark'));
+  });
+
+  // Restore saved preference (default: light)
+  applyTheme(localStorage.getItem('r3d-theme') === 'dark');
+</script>
+</body>
+</html>
