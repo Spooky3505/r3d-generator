@@ -621,6 +621,16 @@
       background: var(--canvas-parchment);
     }
 
+    /* A zero/blank Dead or Live load. Marked in the preview as well as the
+       warning chips because a cell reference is easier to act on when the cell
+       is visible; the chips carry the rows the 12-row preview cannot show. */
+    .merge-table td.cell-flag {
+      background: #fef3c7;
+      color: #92400e;
+      font-weight: 600;
+      box-shadow: inset 2px 0 0 #d97706;
+    }
+
     .merge-preview-scroll {
       width: 100%;
       overflow-x: auto;
@@ -736,6 +746,7 @@
     body.dark .merge-file-chip .chip-remove { background: rgba(255,255,255,0.14); color: var(--body-muted); }
     body.dark .merge-file-chip .chip-remove:hover { background: rgba(255,255,255,0.24); }
     body.dark .merge-table th { background: var(--surface-tile-2); color: var(--body-muted); }
+    body.dark .merge-table td.cell-flag { background: #2d2000; color: #fbbf24; box-shadow: inset 2px 0 0 #b45309; }
     body.dark .merge-table th, body.dark .merge-table td { border-bottom-color: rgba(255,255,255,0.07); }
     body.dark .merge-total { color: #ffffff; }
 
@@ -988,7 +999,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 25;
+  const APP_REV = 26;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2636,7 +2647,38 @@ Engineer
         ]);
       });
     }
-    return { rows, count: rows.length-1, files };
+    return { rows, count: rows.length-1, files, issues: findLoadIssues(rows) };
+  }
+
+  // Columns E (Dead load) and F (Live load) are the two the takeoff exists to
+  // carry, and a 0 in either is almost never a genuinely weightless node -- it
+  // is a row nobody filled in. It also fails silently downstream: the R3D side
+  // deliberately writes no load entry for a zero magnitude, so the node lands
+  // in RISA carrying nothing and nothing reports it.
+  //
+  // The flag is raised in the UI, never in the workbook. The combined output is
+  // verified cell-for-cell against a hand-built reference, so writing a marker
+  // column or blanking a row here would break that match -- and the point is to
+  // fix the source file, not to edit the export.
+  //
+  // Blank and non-numeric are counted separately from an explicit 0: RISA treats
+  // all three the same, but they are different mistakes to go and correct.
+  function loadIssue(v){
+    const s=String(v==null?'':v).trim();
+    if(!s) return 'blank';
+    const n=parseFloat(s);
+    if(!isFinite(n)) return 'non-numeric';
+    return n===0 ? 'zero' : null;
+  }
+  function findLoadIssues(rows){
+    const out=[];
+    // rows[0] is the header, so rows[r] is spreadsheet row r+1 -- the cell
+    // references handed to the user have to match what they see in Excel.
+    for(let r=1;r<rows.length;r++){
+      const dead=loadIssue(rows[r][4]), live=loadIssue(rows[r][5]);
+      if(dead||live) out.push({ row:r+1, id:rows[r][0], dead, live });
+    }
+    return out;
   }
 
   // --- Minimal .xlsx writer (ZIP store + CRC32) -----------------------------
@@ -2749,12 +2791,21 @@ Engineer
     document.getElementById('btn-merge').disabled = valid.length<1;
   }
 
-  function renderMergePreview(rows,count,files){
+  function renderMergePreview(rows,count,files,issues){
     const box=document.getElementById('merge-preview');
     const head=rows[0], body=rows.slice(1,13);
+    // Keyed by spreadsheet row so the lookup does not depend on how far the
+    // preview happens to be sliced.
+    const flagged=new Map((issues||[]).map(x=>[x.row,x]));
     let html='<div class="merge-preview-scroll"><table class="merge-table"><thead><tr>'
       + head.map(h=>`<th>${xmlEsc(h)}</th>`).join('') + '</tr></thead><tbody>'
-      + body.map(r=>'<tr>'+r.map(c=>`<td>${xmlEsc(c)}</td>`).join('')+'</tr>').join('')
+      + body.map((r,bi)=>{
+          const f=flagged.get(bi+2);
+          return '<tr>'+r.map((c,ci)=>{
+            const hit = f && ((ci===4&&f.dead)||(ci===5&&f.live));
+            return `<td${hit?' class="cell-flag"':''}>${xmlEsc(c)}</td>`;
+          }).join('')+'</tr>';
+        }).join('')
       + '</tbody></table></div>';
     html+=`<div class="merge-total">Combined <b>${files.length}</b> file(s) → <b>${count}</b> load nodes. Showing first ${Math.min(12,count)} rows.</div>`;
     box.classList.add('has-content');
@@ -2764,11 +2815,24 @@ Engineer
   document.getElementById('btn-merge').addEventListener('click',()=>{
     const warnBox=document.getElementById('merge-warnings');
     try{
-      const {rows,count,files}=buildCombined();
+      const {rows,count,files,issues}=buildCombined();
       mergeState.output=buildXlsxBytes(rows);
-      renderMergePreview(rows,count,files);
+      renderMergePreview(rows,count,files,issues);
       const warns=[];
       files.forEach(f=>{ if(f.missing&&f.missing.length) warns.push(`${f.name}: filled ${f.missing.join(', ')}`); });
+      // One chip per column-and-kind rather than one per row: 300 chips for a
+      // wholly blank column would bury the file-level warnings above.
+      // Cell references, not identifiers -- the fix happens in the source
+      // spreadsheet, so hand over the coordinate to go and type into.
+      [['dead','Dead load','E'],['live','Live load','F']].forEach(([key,label,col])=>{
+        ['zero','blank','non-numeric'].forEach(kind=>{
+          const hit=issues.filter(x=>x[key]===kind);
+          if(!hit.length) return;
+          const refs=hit.map(x=>col+x.row);
+          const shown=refs.slice(0,10).join(', ')+(refs.length>10?`, +${refs.length-10} more`:'');
+          warns.push(`⚠ ${hit.length} ${kind} ${label} value${hit.length>1?'s':''} — ${shown}`);
+        });
+      });
       if(warns.length){ warnBox.innerHTML=warns.map(w=>`<div class="warning-chip">${xmlEsc(w)}</div>`).join(''); warnBox.style.display='flex'; }
       else warnBox.style.display='none';
       document.getElementById('btn-merge-download').classList.add('visible');
