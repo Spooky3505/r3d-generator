@@ -1030,7 +1030,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 28;
+  const APP_REV = 29;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2462,8 +2462,16 @@ Engineer
   //     Y, -round(uscY,2). The usc frame's Y points opposite the model
   //     frame's, so deriving Y from uscY silently drops the minus sign.
   //   X,mm = uscX*25.4     Y,mm = uscY*25.4     (full precision)
-  //   Persistent Identifier is always <structure code>_<seq>; source IDs are
-  //     discarded (the reference renumbers 2220's GUIDs to 2220_1…2220_300).
+  //   Persistent Identifier is <structure code>_<seq> UNLESS column A of the
+  //     source's first data row contains "_", in which case that file's own
+  //     identifiers pass through verbatim. 2220's GUIDs carry no "_" and are
+  //     still renumbered to 2220_1…2220_300 as the reference expects; 2920's
+  //     hand-assigned 2920_250…2920_1 are kept in source order. Preserved ids
+  //     are not guaranteed unique — duplicates are flagged in the UI, never
+  //     renamed.
+  //   uscX and uscY are required per row; Z / uscZ are not. A row with no
+  //     elevation is kept and writes columns C and K blank, and the file is
+  //     flagged. Requiring Z rejected whole exports that never carried it.
   //   F_Ev/F_Eh default to 0; AZS info / MC pass through (blank if absent)
   //   .scr is the AutoCAD form "._POINT <X,mm>,<Y,mm>", with the coordinates
   //     rendered at 15 significant digits to match Excel's number-to-text rule
@@ -2614,9 +2622,15 @@ Engineer
       throw new Error('No coordinate columns (need uscX/uscY/uscZ or X/Z/Y)');
     const get=(r,i)=> i>=0 ? (r[i]??'') : '';
     const records=[];
+    // Read from the first data row whether or not that row survives the
+    // coordinate filter below. The rule is "column A of row 1 decides"; letting
+    // a skipped row hand the decision to row 2 would make a file's naming
+    // depend on unrelated data three columns away.
+    let firstId=null;
     for(let ri=1;ri<rows.length;ri++){
       const r=rows[ri];
       if(!r || r.every(c=>String(c).trim()==='')) continue;
+      if(firstId===null) firstId=String(get(r,iId)??'').trim();
       // Source X/Z/Y are captured before the usc fallback below can overwrite
       // them: the usc frame's Y points opposite the model frame's, so uscY
       // reads +2962.34 where the source Y column reads -2962.34. Deriving Y
@@ -2626,7 +2640,13 @@ Engineer
       if(ux===''&&iX>=0) ux=get(r,iX);
       if(uy===''&&iY>=0) uy=get(r,iY);
       if(uz===''&&iZ>=0) uz=get(r,iZ);
-      if(ux===''||uy===''||uz==='') continue;
+      // Z is elevation and nothing downstream reads it: the R3D side places
+      // every node from X,mm / Y,mm alone. Some exports ship the column empty
+      // in every row, and requiring it here rejected the entire file with
+      // "No usable data rows" -- a message naming neither the column nor the
+      // reason. Blank Z now flows through to columns C and K blank, and the
+      // file is flagged instead of refused.
+      if(ux===''||uy==='') continue;
       records.push({ id:get(r,iId), ux, uy, uz, x:sx, z:sz, y:sy,
         dl:get(r,iDL), ll:get(r,iLL),
         fev:get(r,iFev), feh:get(r,iFeh), azs:get(r,iAzs), mc:get(r,iMC) });
@@ -2639,7 +2659,19 @@ Engineer
     const dot=name.lastIndexOf('.');
     const stem=(dot>0?name.slice(0,dot):name).trim();
     const dm=/^(\d+)/.exec(stem);
-    return { name, code: dm?dm[1]:stem, records, missing };
+    // Column A of the first data row decides for the whole file. A source that
+    // already carries <something>_<something> was named on purpose, and
+    // renumbering it in file order silently reassigns every load to a different
+    // label -- 2920's hand-assigned 2920_250…2920_1 would come back as
+    // 2920_1…2920_250, reversed. A GUID or a bare number is not a name, so
+    // those still get numbered, which is what the 2220 reference expects.
+    const manualIds=String(firstId??'').includes('_');
+    // Counted rather than all-or-nothing: a file with 249 populated Z and one
+    // blank row is exactly the case the relaxed filter above changed -- that
+    // row used to be dropped and now ships with a blank Z. A whole-file test
+    // would stay silent about the one row whose behaviour actually moved.
+    const blankZ=records.filter(r=>String(r.uz).trim()===''&&String(r.z).trim()==='').length;
+    return { name, code: dm?dm[1]:stem, records, missing, manualIds, blankZ };
   }
 
   // --- Assemble combined 16-column rows -------------------------------------
@@ -2662,10 +2694,17 @@ Engineer
     const seq=new Map();
     for(const f of files){
       f.records.forEach(rec=>{
-        const n=(seq.get(f.code)||0)+1; seq.set(f.code,n);
+        // A manually-named file keeps its own column A verbatim. A blank cell
+        // inside such a file has nothing to keep, so it falls back to the
+        // generated form -- which can collide with a preserved identifier,
+        // which is why findDuplicateIds below exists.
+        const src=String(rec.id??'').trim();
+        let id;
+        if(f.manualIds && src!==''){ id=src; }
+        else { const n=(seq.get(f.code)||0)+1; seq.set(f.code,n); id=`${f.code}_${n}`; }
         const mmX=mmFrom(rec.ux), mmY=mmFrom(rec.uy);
         rows.push([
-          `${f.code}_${n}`,
+          id,
           rec.x!==''?rec.x:round2(rec.ux),
           rec.z!==''?rec.z:round2(rec.uz),
           rec.y!==''?rec.y:negate(round2(rec.uy)),
@@ -2678,7 +2717,19 @@ Engineer
         ]);
       });
     }
-    return { rows, count: rows.length-1, files, issues: findLoadIssues(rows) };
+    // Duplicates are merged into the same `issues` array the load flags use, so
+    // the preview highlighter and the row-number gutter pick them up without a
+    // second lookup path -- a row can carry a bad load and a duplicate name at
+    // once, and it should light up for both.
+    const issues=findLoadIssues(rows);
+    const dups=findDuplicateIds(rows);
+    const byRow=new Map(issues.map(i=>[i.row,i]));
+    for(const d of dups){
+      const e=byRow.get(d.row);
+      if(e) e.dup=d.dup;
+      else { const n={row:d.row, id:d.id, dup:d.dup}; byRow.set(d.row,n); issues.push(n); }
+    }
+    return { rows, count: rows.length-1, files, issues, dups };
   }
 
   // Columns E (Dead load) and F (Live load) are the two the takeoff exists to
@@ -2708,6 +2759,23 @@ Engineer
     for(let r=1;r<rows.length;r++){
       const dead=loadIssue(rows[r][4]), live=loadIssue(rows[r][5]);
       if(dead||live) out.push({ row:r+1, id:rows[r][0], dead, live });
+    }
+    return out;
+  }
+
+  // Preserved identifiers are only as unique as the source made them. Two
+  // manually-named files, or one file dropped twice under two names, can now
+  // put the same string in column A twice -- something the generated
+  // <code>_<seq> form structurally could not do. Flagged, never renamed:
+  // silently disambiguating a deliberate label is worse than reporting it.
+  // `dup` carries the row the identifier was first seen on, so the message can
+  // point at both ends of the collision.
+  function findDuplicateIds(rows){
+    const first=new Map(), out=[];
+    for(let r=1;r<rows.length;r++){
+      const id=rows[r][0];
+      if(first.has(id)) out.push({ row:r+1, id, dup:first.get(id) });
+      else first.set(id,r+1);
     }
     return out;
   }
@@ -2847,7 +2915,7 @@ Engineer
           const rn=bi+2;                       // rows[0] is the header, so body[0] is row 2
           const f=flagged.get(rn);
           return `<tr${f?' class="has-flag"':''}><td class="row-no">${rn}</td>`+r.map((c,ci)=>{
-            const hit = f && ((ci===4&&f.dead)||(ci===5&&f.live));
+            const hit = f && ((ci===0&&f.dup)||(ci===4&&f.dead)||(ci===5&&f.live));
             return `<td${hit?' class="cell-flag"':''}>${xmlEsc(c)}</td>`;
           }).join('')+'</tr>';
         }).join('')
@@ -2861,11 +2929,22 @@ Engineer
   document.getElementById('btn-merge').addEventListener('click',()=>{
     const warnBox=document.getElementById('merge-warnings');
     try{
-      const {rows,count,files,issues}=buildCombined();
+      const {rows,count,files,issues,dups}=buildCombined();
       mergeState.output=buildXlsxBytes(rows);
       renderMergePreview(rows,count,files,issues);
       const warns=[];
       files.forEach(f=>{ if(f.missing&&f.missing.length) warns.push(`${f.name}: filled ${f.missing.join(', ')}`); });
+      // Stated rather than left to be inferred from the preview: a file keeping
+      // its own identifiers looks identical to one that was renumbered unless
+      // you already know what the source said.
+      files.forEach(f=>{ if(f.manualIds) warns.push(`${f.name}: kept its own identifiers — column A already names each row`); });
+      files.forEach(f=>{
+        if(!f.blankZ) return;
+        const all=f.blankZ===f.records.length;
+        warns.push({ severe:false, text: all
+          ? `⚠ ${f.name}: no elevation data — Z and uscZ are blank in every row, and are written to the workbook blank`
+          : `⚠ ${f.name}: ${f.blankZ} of ${f.records.length} rows have no elevation — Z and uscZ are written blank for those rows` });
+      });
       // One chip per column-and-kind rather than one per row: 300 chips for a
       // wholly blank column would bury the file-level warnings above.
       // Cell references, not identifiers -- the fix happens in the source
@@ -2888,6 +2967,15 @@ Engineer
           });
         });
       });
+      // Red, not amber: two rows sharing a name is not a value to go and tidy,
+      // it is a workbook where a load can no longer be traced back to a point.
+      // Cell references again -- the source spreadsheet is where it gets fixed.
+      if(dups.length){
+        const refs=dups.map(d=>'A'+d.row);
+        const shown=refs.slice(0,10).join(', ')+(refs.length>10?`, +${refs.length-10} more`:'');
+        warns.push({ severe:true,
+          text:`✕ ${dups.length} duplicate identifier${dups.length>1?'s':''} in column A — ${shown} (kept as-is; two rows now share a name)` });
+      }
       // Entries are either a plain string (file-level notes) or {severe,text}.
       if(warns.length){
         warnBox.innerHTML=warns.map(w=>{
