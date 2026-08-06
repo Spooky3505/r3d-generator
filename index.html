@@ -1030,7 +1030,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 30;
+  const APP_REV = 31;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2859,10 +2859,20 @@ Engineer
   mergeZone.addEventListener('dragover',e=>{ e.preventDefault(); mergeZone.classList.add('dragover'); });
   mergeZone.addEventListener('dragleave',()=>mergeZone.classList.remove('dragover'));
   mergeZone.addEventListener('drop',e=>{ e.preventDefault(); mergeZone.classList.remove('dragover'); addMergeFiles(e.dataTransfer.files); });
-  mergeInput.addEventListener('change',e=>{ addMergeFiles(e.target.files); mergeInput.value=''; });
+  // The input has to be cleared so re-picking the SAME file fires `change`
+  // again -- but only once addMergeFiles has finished with it. `e.target.files`
+  // is a live FileList, and `value=''` empties it in place; clearing while the
+  // loop below was parked on an `await` truncated the list mid-iteration and
+  // silently dropped every file after the first. Picking four files through
+  // `browse` loaded one. Dragging four in was unaffected, which is why it went
+  // unnoticed: a DataTransfer's list is a separate object nothing clears.
+  mergeInput.addEventListener('change',async e=>{ await addMergeFiles(e.target.files); mergeInput.value=''; });
 
   async function addMergeFiles(fileList){
-    for(const file of fileList){
+    // Snapshotted before the first await, so no caller can shorten the list
+    // underneath this loop. The await above is the fix; this is the guard that
+    // stops the same bug coming back through a different caller.
+    for(const file of [...fileList]){
       if(mergeState.files.some(f=>f.name===file.name)) continue; // skip duplicate drops
       try { mergeState.files.push(await parseLoadFile(file)); }
       catch(err){ mergeState.files.push({name:file.name, code:'', records:[], missing:[], error:err.message}); }
