@@ -1030,7 +1030,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 29;
+  const APP_REV = 30;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2941,9 +2941,12 @@ Engineer
       files.forEach(f=>{
         if(!f.blankZ) return;
         const all=f.blankZ===f.records.length;
+        // "…are written to the workbook blank" was a garden path: the reader
+        // reaches "written to the workbook" and then "blank" arrives with
+        // nothing to attach to. Say where the cells end up, then what they hold.
         warns.push({ severe:false, text: all
-          ? `⚠ ${f.name}: no elevation data — Z and uscZ are blank in every row, and are written to the workbook blank`
-          : `⚠ ${f.name}: ${f.blankZ} of ${f.records.length} rows have no elevation — Z and uscZ are written blank for those rows` });
+          ? `⚠ ${f.name}: no elevation data — Z and uscZ are blank in every row, and stay blank in the downloaded workbook`
+          : `⚠ ${f.name}: ${f.blankZ} of ${f.records.length} rows have no elevation — Z and uscZ stay blank for those rows in the downloaded workbook` });
       });
       // One chip per column-and-kind rather than one per row: 300 chips for a
       // wholly blank column would bury the file-level warnings above.
