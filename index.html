@@ -1030,7 +1030,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 31;
+  const APP_REV = 32;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2457,11 +2457,16 @@ Engineer
   //
   // Output schema, verified cell-for-cell against the reference workbook by
   // tools/merge-harness.mjs — run it after touching anything below.
-  //   X / Z / Y pass through the source's own columns; only where a source
-  //     lacks them do they fall back to round(uscX,2) / round(uscZ,2) and, for
-  //     Y, -round(uscY,2). The usc frame's Y points opposite the model
-  //     frame's, so deriving Y from uscY silently drops the minus sign.
-  //   X,mm = uscX*25.4     Y,mm = uscY*25.4     (full precision)
+  //   X / Z / Y pass through the source's own columns. The fallback to
+  //     round(uscX,2) / round(uscZ,2) and, for Y, -round(uscY,2) fires only
+  //     where the source has no such column *in its header* -- a declared
+  //     column left blank stays blank. The usc frame's Y points opposite the
+  //     model frame's, so deriving Y from uscY silently drops the minus sign.
+  //   X,mm / Y,mm pass through the source's own columns too, whether named or
+  //     sitting unnamed in positions 14-16 (see the ._POINT probe below); only
+  //     a source carrying neither gets uscX*25.4 / uscY*25.4 at full precision.
+  //     2920's own values are rounded to 4dp and match uscX*25.4 in 14 of 250
+  //     rows, so which of the two is used is visible in the output.
   //   Persistent Identifier is <structure code>_<seq> UNLESS column A of the
   //     source's first data row contains "_", in which case that file's own
   //     identifiers pass through verbatim. 2220's GUIDs carry no "_" and are
@@ -2472,10 +2477,12 @@ Engineer
   //   uscX and uscY are required per row; Z / uscZ are not. A row with no
   //     elevation is kept and writes columns C and K blank, and the file is
   //     flagged. Requiring Z rejected whole exports that never carried it.
-  //   F_Ev/F_Eh default to 0; AZS info / MC pass through (blank if absent)
-  //   .scr is the AutoCAD form "._POINT <X,mm>,<Y,mm>", with the coordinates
+  //   F_Ev/F_Eh default to 0 only when the source declares no such column;
+  //     declared-and-blank stays blank. AZS info / MC pass through (blank if absent)
+  //   .scr passes through the source's own column when it has one. Otherwise it
+  //     is built as the AutoCAD form "._POINT <X,mm>,<Y,mm>", coordinates
   //     rendered at 15 significant digits to match Excel's number-to-text rule
-  //     — the reference built that column with ="._POINT " & N & "," & O.
+  //     — the 2220 reference built that column with ="._POINT " & N & "," & O.
   //     (the legacy All Loads file emitted "._POINT uscZ,AZS" — a bug we do not reproduce)
   //   N1/O1/P1 are left blank, as the reference has no labels for them.
   //
@@ -2495,7 +2502,8 @@ Engineer
     'dead load':'dl','dl':'dl',
     'live load':'ll','ll':'ll',
     'f_ev':'fev','fev':'fev','f_eh':'feh','feh':'feh',
-    'azs info':'azs','azs':'azs','mc':'mc'
+    'azs info':'azs','azs':'azs','mc':'mc',
+    'x,mm':'mmX','y,mm':'mmY','.scr':'scr','scr':'scr'
   };
 
   function xmlEsc(s){
@@ -2620,6 +2628,22 @@ Engineer
     const iFev=idxOf('fev'), iFeh=idxOf('feh'), iAzs=idxOf('azs'), iMC=idxOf('mc');
     if((iUX<0||iUY<0||iUZ<0) && (iX<0||iY<0||iZ<0))
       throw new Error('No coordinate columns (need uscX/uscY/uscZ or X/Z/Y)');
+    let iMmX=idxOf('mmX'), iMmY=idxOf('mmY'), iScr=idxOf('scr');
+    // 2920.csv carries X,mm / Y,mm / .scr in columns 14-16 under *empty header
+    // cells*, so HEADER_MAP has nothing to match and the values were being
+    // recomputed instead of used. Those three positions are adopted only when
+    // shape and content both agree: three unnamed trailing columns, two finite
+    // numbers, and an AutoCAD point command. Position alone is not enough --
+    // an export that grows three unrelated trailing columns fails the ._POINT
+    // probe and falls back to computing from uscX/uscY, as before.
+    if(iMmX<0 && iMmY<0 && iScr<0 && rows[0].length>=16
+       && [13,14,15].every(i=>String(rows[0][i]??'').trim()==='')){
+      const probe=rows.slice(1).find(r=>r&&r.some(c=>String(c).trim()!==''));
+      if(probe && isFinite(parseFloat(probe[13])) && isFinite(parseFloat(probe[14]))
+         && String(probe[15]??'').trim().startsWith('._POINT')){
+        iMmX=13; iMmY=14; iScr=15;
+      }
+    }
     const get=(r,i)=> i>=0 ? (r[i]??'') : '';
     const records=[];
     // Read from the first data row whether or not that row survives the
@@ -2649,7 +2673,8 @@ Engineer
       if(ux===''||uy==='') continue;
       records.push({ id:get(r,iId), ux, uy, uz, x:sx, z:sz, y:sy,
         dl:get(r,iDL), ll:get(r,iLL),
-        fev:get(r,iFev), feh:get(r,iFeh), azs:get(r,iAzs), mc:get(r,iMC) });
+        fev:get(r,iFev), feh:get(r,iFeh), azs:get(r,iAzs), mc:get(r,iMC),
+        mmX:get(r,iMmX), mmY:get(r,iMmY), scr:get(r,iScr) });
     }
     if(!records.length) throw new Error('No usable data rows');
     const missing=[];
@@ -2671,7 +2696,14 @@ Engineer
     // row used to be dropped and now ships with a blank Z. A whole-file test
     // would stay silent about the one row whose behaviour actually moved.
     const blankZ=records.filter(r=>String(r.uz).trim()===''&&String(r.z).trim()==='').length;
-    return { name, code: dm?dm[1]:stem, records, missing, manualIds, blankZ };
+    // "The source declared this column" is not the same fact as "this cell has
+    // a value", and collapsing the two is what made 2920 diverge: it declares
+    // X, Z, Y, F_Ev and F_Eh and leaves every cell empty, and the old rule read
+    // that as "column missing" and filled all five in. Which column exists is a
+    // property of the file, so it is captured once here rather than re-derived
+    // per row from a blank that cannot distinguish the two cases.
+    const has={ X:iX>=0, Z:iZ>=0, Y:iY>=0, fev:iFev>=0, feh:iFeh>=0 };
+    return { name, code: dm?dm[1]:stem, records, missing, manualIds, blankZ, has };
   }
 
   // --- Assemble combined 16-column rows -------------------------------------
@@ -2702,18 +2734,23 @@ Engineer
         let id;
         if(f.manualIds && src!==''){ id=src; }
         else { const n=(seq.get(f.code)||0)+1; seq.set(f.code,n); id=`${f.code}_${n}`; }
-        const mmX=mmFrom(rec.ux), mmY=mmFrom(rec.uy);
+        // A source that already carries X,mm / Y,mm keeps its own numbers.
+        // 2920's are rounded to 4dp and agree with uscX*25.4 in only 14 of 250
+        // rows, so recomputing them silently replaced the values the reference
+        // workbook was built from. .scr follows whatever those two columns are.
+        const mmX = rec.mmX!=='' ? rec.mmX : mmFrom(rec.ux);
+        const mmY = rec.mmY!=='' ? rec.mmY : mmFrom(rec.uy);
         rows.push([
           id,
-          rec.x!==''?rec.x:round2(rec.ux),
-          rec.z!==''?rec.z:round2(rec.uz),
-          rec.y!==''?rec.y:negate(round2(rec.uy)),
+          f.has.X ? rec.x : round2(rec.ux),
+          f.has.Z ? rec.z : round2(rec.uz),
+          f.has.Y ? rec.y : negate(round2(rec.uy)),
           rec.dl, rec.ll,
-          rec.fev!==''?rec.fev:'0', rec.feh!==''?rec.feh:'0',
+          f.has.fev ? rec.fev : '0', f.has.feh ? rec.feh : '0',
           rec.ux, rec.uy, rec.uz,
           rec.azs, rec.mc,
           mmX, mmY,
-          `._POINT ${excelText(mmX)},${excelText(mmY)}`
+          rec.scr!=='' ? rec.scr : `._POINT ${excelText(mmX)},${excelText(mmY)}`
         ]);
       });
     }
