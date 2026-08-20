@@ -1030,7 +1030,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 32;
+  const APP_REV = 33;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1771,15 +1771,32 @@ Engineer
     });
   }
 
+  // The load takeoff arrives in one of two layouts. The original matched export
+  // is five columns (id, Dead load, Live load, X_mm, Y_mm). The combined
+  // workbook the Combine Load Files panel produces is sixteen: the loads sit in
+  // E/F and the coordinates in I/J, named uscX/uscY and held in inches. Both
+  // name their columns, so the header row picks the layout -- and the divisor
+  // travels with it, because 25.4/304.8 === 1/12: reading I/J at /12 lands on
+  // exactly the point reading the rounded X,mm/Y,mm at /304.8 would.
+  function loadCsvLayout(headerRow) {
+    const names = (headerRow || []).map(h => String(h || '').trim().toLowerCase());
+    const at = n => names.indexOf(n);
+    const x = at('uscx'), y = at('uscy'), dl = at('dead load'), ll = at('live load');
+    if (x >= 0 && y >= 0 && dl >= 0 && ll >= 0)
+      return { dl, ll, x, y, perFoot: 12, coords: 'uscX/uscY (columns I and J)' };
+    return { dl: 1, ll: 2, x: 3, y: 4, perFoot: 304.8, coords: 'X_mm/Y_mm (columns 4 and 5)' };
+  }
+
   function renderCsvPreview(text) {
     const rows = parseCSV(text);
     const box = document.getElementById('csv-preview');
     if (rows.length < 2) { box.innerHTML = '<span>No data rows found.</span>'; return; }
     const dataRows = rows.slice(1);
+    const lay = loadCsvLayout(rows[0]);
     let dl = 0, ll = 0;
     for (const row of dataRows) {
-      if (Math.round(parseFloat(row[1]) || 0) !== 0) dl++;
-      if (Math.round(parseFloat(row[2]) || 0) !== 0) ll++;
+      if (Math.round(parseFloat(row[lay.dl]) || 0) !== 0) dl++;
+      if (Math.round(parseFloat(row[lay.ll]) || 0) !== 0) ll++;
     }
     box.classList.add('has-content');
     box.innerHTML = `<div class="entity-list">
@@ -2039,14 +2056,16 @@ Engineer
     // 2. Parse CSV → load nodes (optional)
     const loadNodes = [];
     let badLoadRows = 0;
+    let loadLayout = null;
     if (state.csv) {
       const csvRows = parseCSV(state.csv);
+      loadLayout = loadCsvLayout(csvRows[0]);
       for (let i = 1; i < csvRows.length; i++) {
         const row = csvRows[i];
         const id = (row[0] || '').trim();
         if (!id) continue;
-        const xFt = parseFloat(row[3]) / 304.8;
-        const yFt = parseFloat(row[4]) / 304.8;
+        const xFt = parseFloat(row[loadLayout.x]) / loadLayout.perFoot;
+        const yFt = parseFloat(row[loadLayout.y]) / loadLayout.perFoot;
         // A blank or non-numeric coordinate would otherwise propagate NaN all
         // the way into the node line, producing a .r3d RISA can't read — and
         // silently, since NaN fails every comparison without throwing. Skip and
@@ -2054,8 +2073,8 @@ Engineer
         if (isNaN(xFt) || isNaN(yFt)) { badLoadRows++; continue; }
         loadNodes.push({
           id,
-          dl: parseFloat(row[1]) || 0,
-          ll: parseFloat(row[2]) || 0,
+          dl: parseFloat(row[loadLayout.dl]) || 0,
+          ll: parseFloat(row[loadLayout.ll]) || 0,
           xFt,
           yFt
         });
@@ -2297,13 +2316,13 @@ Engineer
     if (jointCount === 0)
       warnings.push('No joint nodes were generated — DXF may be empty or malformed');
     if (state.csv && loadNodes.length === 0)
-      warnings.push('No valid rows found in Matched Load CSV — check column order (Persistent, Dead load, Live load, X_mm, Y_mm)');
+      warnings.push(`No valid rows found in Matched Load CSV — read as ${loadLayout.coords}; check the header row names the load and coordinate columns`);
     if (pinPointMidMember > 0)
       warnings.push(`${pinPointMidMember} of ${pinPointCount} Pin BC points sit mid-length on an HSS member (not at a drawn joint) — this is a normal support location, added as a standalone node (Boundaries: +${pinPointMidMember}). Re-export HSS ONLY.dxf from AutoCAD with members split at these points if you want them framed into the model.`);
     if (pinPointOffGeometry > 0)
       warnings.push(`${pinPointOffGeometry} of ${pinPointCount} Pin BC points don't land on or along any HSS/Load geometry at all — worth checking these for a misplaced point (Boundaries: +${pinPointOffGeometry}). Added as standalone nodes — see Download Unconnected Pins DXF`);
     if (badLoadRows > 0)
-      warnings.push(`${badLoadRows} Matched Load CSV row${badLoadRows === 1 ? '' : 's'} had a blank or non-numeric X_mm/Y_mm coordinate and ${badLoadRows === 1 ? 'was' : 'were'} skipped — check columns 4 and 5. Their loads are NOT in the model.`);
+      warnings.push(`${badLoadRows} Matched Load CSV row${badLoadRows === 1 ? '' : 's'} had a blank or non-numeric coordinate and ${badLoadRows === 1 ? 'was' : 'were'} skipped — check ${loadLayout.coords}. Their loads are NOT in the model.`);
     if (unknownNotionalLayers.size > 0) {
       const detail = [...unknownNotionalLayers.entries()].map(([l, n]) => `"${l}" ×${n}`).join(', ');
       const total = [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0);
