@@ -160,6 +160,7 @@
     .panel[data-type="pinbc"] { --accent: var(--primary); --accent-bg: #f0f4ff; }
     .panel[data-type="csv"]   { --accent: var(--primary); --accent-bg: #f0f4ff; }
     .panel[data-type="nos"]   { --accent: var(--primary); --accent-bg: #f0f4ff; }
+    .panel[data-type="seis"]  { --accent: var(--primary); --accent-bg: #f0f4ff; }
 
     .panel-header {
       padding: 14px 18px 12px;
@@ -936,6 +937,25 @@
       </div>
     </div>
 
+    <!-- Panel 5: Seismic Load Cases — BRCSEISOUT exports, one per load case -->
+    <div class="panel" data-type="seis">
+      <div class="panel-header">
+        <span class="step-badge">05</span>
+        <span class="panel-title">Seismic Load Cases — BRCSEISOUT exports</span>
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="seis-zone">
+          <input type="file" id="seis-input" accept=".csv" multiple>
+          <div class="drop-icon">🌐</div>
+          <div class="drop-label">Drop files here or <span>browse</span></div>
+          <div class="drop-hint">Accepted: .csv — several at once, each named for its load case</div>
+        </div>
+        <div class="merge-filelist" id="seis-filelist"></div>
+        <div class="preview-label">Load Case Summary</div>
+        <div class="preview-box" id="seis-preview"><span>No files loaded.</span></div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Combine Load Files (merge multiple per-structure exports into one workbook) -->
@@ -999,6 +1019,10 @@
         <div class="stat-value" id="stat-notional">—</div>
         <div class="stat-label">Notional</div>
       </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-seismic">—</div>
+        <div class="stat-label">Seismic</div>
+      </div>
     </div>
     <div class="warnings-area" id="warnings-area" style="display:none"></div>
     <div class="notional-note" id="pin-match-note" style="display:none"></div>
@@ -1030,7 +1054,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 33;
+  const APP_REV = 34;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1557,7 +1581,7 @@ Engineer
 [CUSTOM_REPORT_SECTIONS_3D] <0>
 [END_CUSTOM_REPORT_SECTIONS_3D] `;
 
-  const R3D_TAIL = `[TIME_HISTORY_INPUT]
+  const R3D_TAIL_HEAD = `[TIME_HISTORY_INPUT]
 0 0 0.000000 0.250000 0.500000 0.000000 0.000000 5.000000 0.000000 1.000000;
 [END_TIME_HISTORY_INPUT]
 
@@ -1576,8 +1600,13 @@ Engineer
 [END_SPECTRA_SCALING_FACTOR]
 
 
-[LOAD_COMBINATIONS] <26>
-"DL                                                                             " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
+`;
+
+  // The 26 notional-scheme combinations, lifted verbatim out of R3D_TAIL at
+  // Rev 34 so a second scheme could take their place. Not rebuilt from data:
+  // this is the block that has been importing into RISA since Rev 1, and the
+  // point of moving it was to leave it byte-identical while making it optional.
+  const NOTIONAL_COMBO_LINES = `"DL                                                                             " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
 "D + L                                                                          " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "2                               " 1.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
 "D + 0.7NoTR                                                                    " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "3                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
 "D + 0.7NoTL                                                                    " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 1.000000 "4                               " 0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
@@ -1602,8 +1631,9 @@ Engineer
 "0.6D  - 0.7NoTR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "3                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
 "0.6D  - 0.7NoTL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "4                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
 "0.6D  - 0.7NoLR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "5                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
-"0.6D  - 0.7NoLL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "6                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
-[END_LOAD_COMBINATIONS]
+"0.6D  - 0.7NoLL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "6                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;`.split('\n');
+
+  const R3D_TAIL_FOOT = `
 
 
 [SAVED_SELECTION_STATES] <2>
@@ -1635,9 +1665,125 @@ Engineer
 [FINISH]`;
 
   // ---------------------------------------------------------------------------
+  // The seismic scheme (Rev 34)
+  //
+  // Eleven basic load cases and 28 combinations, transcribed from the BLC and
+  // LC sheets of Autolisp/raw/CAZ5 Ph2 Load Calcs template.xlsx. Read off the
+  // SHEETS, not off the screenshots of them -- the images render the Solve
+  // column blank on every row, while the sheet has it 1 on sixteen rows and 0
+  // on twelve. Honouring the sheet was the user's call, 2026-08-24.
+  //
+  // This replaces the notional scheme, and only when panel 05 has a file. A
+  // run with no seismic sheet writes exactly what Rev 33 wrote.
+  // ---------------------------------------------------------------------------
+
+  // BLC 1 and 2 are filled by the existing panels. BLC 3 (Ev) is deliberately
+  // written empty for editing in RISA -- BRCSEISOUT cannot export a case by
+  // that name, and every seismic combination references it. BLC 4-11 take the
+  // F_Ev column of whichever dropped file is named for them.
+  const SEISMIC_BLCS = [
+    'DL', 'LL', 'Ev',
+    'EhTR', 'EhTL', 'EhLR', 'EhLL',
+    'REhTR', 'REhTL', 'REhLR', 'REhLL'
+  ];
+  // Lower-cased name -> 1-based BLC number, for matching a dropped filename.
+  const SEISMIC_BLC_BY_NAME = new Map(SEISMIC_BLCS.map((n, i) => [n.toLowerCase(), i + 1]));
+  // The eight a BRCSEISOUT export can be named after. DL, LL and Ev are not
+  // among them: BraceSeismic's own load-case prompt offers exactly these.
+  const SEISMIC_FILE_CASES = SEISMIC_BLCS.slice(3);
+
+  // RISA's category code, the ninth field of a BASIC_LOAD_CASES line. 1 is Dead
+  // and 2 is Live, both read off this file's existing DL/LL lines. The code for
+  // "EL - Earthquake Load" is NOT known -- RISA's Appendix D is the authority
+  // and returns 403, and there is no other .r3d on this machine to read it off.
+  //
+  // 59 is what this file already writes for its four notional cases, so it is
+  // known to import. Using it here mislabels the category in RISA's own
+  // dropdown and NOTHING ELSE: combinations reference a BLC by NUMBER, so every
+  // factor, every load and every result is unaffected. One edit fixes it the
+  // moment the real code is known. On the checklist for the first import.
+  const BLC_CAT_DL = 1, BLC_CAT_LL = 2, BLC_CAT_EL = 59;
+
+  // A combination line: 79-char description, 23 flags, then exactly ten
+  // 32-char BLC/factor pairs, the unused ones empty. Verified against the
+  // notional block above -- comboLine(desc, 1, [[1,1]]) reproduces its first
+  // line character for character, which the harness asserts.
+  //
+  // WHICH FLAG IS SOLVE. All 26 notional lines carry an identical flag string,
+  // so the file alone cannot say. Flags 2, 3 and 4 read 1, 1, 0, which matches
+  // the LC sheet's Solve=1 / P-Delta=Y / SRSS=blank exactly; reading the FIRST
+  // three instead gives Solve=0 and SRSS=1, i.e. a working model that solves
+  // nothing and SRSS-combines everything. Two constraints fit one reading and
+  // neither fits the other, so flag 2 is Solve. It is still an inference from
+  // one sample: if RISA shows all 28 combinations solving, this is the constant
+  // to look at.
+  const COMBO_FLAGS_HEAD = '0';
+  const COMBO_FLAGS_TAIL = '1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1';
+  const COMBO_MAX_PAIRS = 10;
+
+  function comboLine(desc, solve, pairs) {
+    const slots = [];
+    for (let i = 0; i < COMBO_MAX_PAIRS; i++) {
+      const pr = pairs[i];
+      slots.push(pr ? `"${pad32(String(pr[0]))}" ${pr[1].toFixed(6)}`
+                    : `"${pad32('')}" 0.000000`);
+    }
+    return `"${String(desc).padEnd(79)}" ${COMBO_FLAGS_HEAD} ${solve} ${COMBO_FLAGS_TAIL} ${slots.join(' ')};`;
+  }
+
+  // Descriptions are reproduced VERBATIM, defects included: row 20 reads
+  // "0.525REhTLR", which is not one of the eleven names -- its own factor
+  // columns (BLC 10 then 11) say it means REhLR -- and rows 8, 13, 24 and 29
+  // carry an interior space in "0.7 REhLL". Nothing computes from a
+  // description, and a generated file that differs from the workbook is worse
+  // than one that carries the workbook's own typo. The user's call; the page
+  // flags both so the workbook is what gets corrected.
+  const SEISMIC_COMBOS = [
+    { d: "DL", solve: 1, p: [[1, 1.0]] },
+    { d: "D + L", solve: 1, p: [[1, 1.0], [2, 1.0]] },
+    { d: "D + 0.75L", solve: 1, p: [[1, 1.0], [2, 0.75]] },
+    { d: "0.6D", solve: 1, p: [[1, 0.6]] },
+    { d: "D + 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", solve: 1, p: [[1, 1.0], [3, 0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
+    { d: "D + 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", solve: 1, p: [[1, 1.0], [3, 0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
+    { d: "D + 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", solve: 1, p: [[1, 1.0], [3, 0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
+    { d: "D + 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", solve: 1, p: [[1, 1.0], [3, 0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", solve: 0, p: [[1, 1.0], [3, 0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", solve: 0, p: [[1, 1.0], [3, 0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
+    { d: "D + 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", solve: 0, p: [[1, 1.0], [3, 0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", solve: 0, p: [[1, 1.0], [3, 0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
+    { d: "D + 0.525Ev + 0.525EhTR + 0.75L + 0.525REhTR - 0.525REhTL", solve: 1, p: [[1, 1.0], [3, 0.525], [4, 0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
+    { d: "D + 0.525Ev + 0.525EhTL + 0.75L - 0.525REhTR + 0.525REhTL", solve: 1, p: [[1, 1.0], [3, 0.525], [5, 0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
+    { d: "D + 0.525Ev + 0.525EhLR + 0.75L + 0.525REhLR - 0.525REhLL", solve: 1, p: [[1, 1.0], [3, 0.525], [6, 0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
+    { d: "D + 0.525Ev + 0.525EhLL + 0.75L - 0.525REhLR + 0.525REhLL", solve: 1, p: [[1, 1.0], [3, 0.525], [7, 0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhTR + 0.75L - 0.525REhTR + 0.525REhTL", solve: 0, p: [[1, 1.0], [3, 0.525], [4, -0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhTL + 0.75L + 0.525REhTR - 0.525REhTL", solve: 0, p: [[1, 1.0], [3, 0.525], [5, -0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
+    { d: "D + 0.525Ev - 0.525EhLR + 0.75L - 0.525REhTLR + 0.525REhLL", solve: 0, p: [[1, 1.0], [3, 0.525], [6, -0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhLL + 0.75L + 0.525REhLR - 0.525REhLL", solve: 0, p: [[1, 1.0], [3, 0.525], [7, -0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
+    { d: "0.6D - 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", solve: 1, p: [[1, 0.6], [3, -0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", solve: 1, p: [[1, 0.6], [3, -0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", solve: 1, p: [[1, 0.6], [3, -0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", solve: 1, p: [[1, 0.6], [3, -0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", solve: 0, p: [[1, 0.6], [3, -0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", solve: 0, p: [[1, 0.6], [3, -0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", solve: 0, p: [[1, 0.6], [3, -0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", solve: 0, p: [[1, 0.6], [3, -0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
+  ];
+
+  function seismicComboLines() {
+    return SEISMIC_COMBOS.map(c => comboLine(c.d, c.solve, c.p));
+  }
+
+  function loadCombinationsSection(lines) {
+    return [`[LOAD_COMBINATIONS] <${lines.length}>`, ...lines, '[END_LOAD_COMBINATIONS]'].join('\n');
+  }
+
+  // ---------------------------------------------------------------------------
   // App state
   // ---------------------------------------------------------------------------
-  const state = { dxf: null, pinDxf: null, csv: null, nosCsv: null, output: null, unconnectedPins: null };
+  // state.seis is a LIST, unlike every other panel: the seismic scheme needs
+  // one file per load case and there are eight of them. Entries are
+  // { name, blc, caseName, text, rows, error }.
+  const state = { dxf: null, pinDxf: null, csv: null, nosCsv: null, seis: [], output: null, unconnectedPins: null };
 
   // ---------------------------------------------------------------------------
   // Drag-over styling
@@ -1654,6 +1800,19 @@ Engineer
       handleFile(type, file);
     });
   });
+
+  // Panel 05 takes several files at once, so it wires its own zone rather than
+  // joining the single-file loop above.
+  (() => {
+    const zone = document.getElementById('seis-zone');
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      addSeisFiles(e.dataTransfer.files);
+    });
+  })();
 
   // Revision pill is written from APP_REV, so the badge and the source can
   // never disagree and a revision number can't accidentally be reused.
@@ -1833,7 +1992,11 @@ Engineer
   // Generate button state
   // ---------------------------------------------------------------------------
   function updateGenerateButton() {
-    document.getElementById('btn-generate').disabled = !(state.dxf || state.csv || state.pinDxf || state.nosCsv);
+    // A duplicate load case blocks the generate outright -- the user's call.
+    // Two files claiming one BLC means one of them is silently ignored
+    // whichever way it is resolved, and that is not a thing to resolve quietly.
+    const anyInput = state.dxf || state.csv || state.pinDxf || state.nosCsv || (state.seis || []).length > 0;
+    document.getElementById('btn-generate').disabled = !anyInput || seisDuplicateCases().length > 0;
   }
 
   function clearPanel(stateKey, prefix, inputId, previewId, emptyMsg) {
@@ -1855,6 +2018,168 @@ Engineer
     clearPanel('csv', 'csv', 'csv-input', 'csv-preview', 'No file loaded.'));
   document.getElementById('nos-clear').addEventListener('click', () =>
     clearPanel('nosCsv', 'nos', 'nos-input', 'nos-preview', 'No file loaded.'));
+
+  // ---------------------------------------------------------------------------
+  // Panel 05 — seismic load cases
+  //
+  // One BRCSEISOUT export per load case. The file's NAME picks the BLC, which
+  // is not a convenience: BraceSeismic's own header states the rows of an
+  // export are byte-identical whichever case is chosen at the prompt, so the
+  // name is the only thing in the file that distinguishes EhTR from REhLL.
+  // That also means eight exports of the SAME selected blocks would give eight
+  // identical cases -- a workflow assumption no code here can check, which is
+  // why the panel shows every file's detected case and row count before
+  // Generate is ever pressed.
+  // ---------------------------------------------------------------------------
+
+  // Filename -> BLC number, or 0. Only the eight cases BRCSEISOUT can export
+  // are accepted: DL and LL come from panel 03, and Ev is written empty by
+  // decision, so a file named for any of those three is a mistake worth naming
+  // rather than a case worth filling.
+  function seisCaseOf(filename) {
+    const base = String(filename).replace(/\.[^.]*$/, '').trim().toLowerCase();
+    const blc = SEISMIC_BLC_BY_NAME.get(base);
+    return (blc && blc >= 4) ? blc : 0;
+  }
+
+  // The sixteen-column BRCSEISOUT layout, located BY HEADER NAME. There is no
+  // positional fallback here, unlike loadCsvLayout: this file's whole purpose
+  // is a signed seismic value, and probing for it by position on an
+  // unrecognised layout is how a model imports clean and carries the wrong
+  // numbers. An unnamed column means the file is rejected and said so.
+  function seisCsvLayout(headerRow) {
+    const names = (headerRow || []).map(h => String(h || '').trim().toLowerCase());
+    const at = n => names.indexOf(n);
+    const fev = at('f_ev'), x = at('uscx'), y = at('uscy'), dl = at('dead load');
+    if (fev < 0 || x < 0 || y < 0) return null;
+    // uscX/uscY are INCHES, so a foot is 12 of them -- the same identity
+    // loadCsvLayout relies on (25.4/304.8 === 1/12).
+    return { fev, x, y, dl, perFoot: 12 };
+  }
+
+  function parseSeisText(text) {
+    const rows = parseCSV(text);
+    const lay = seisCsvLayout(rows[0]);
+    if (!lay) return { error: 'header does not name F_Ev, uscX and uscY' };
+    const out = [];
+    let bad = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const id = (row[0] || '').trim();
+      if (!id) continue;
+      const xFt = parseFloat(row[lay.x]) / lay.perFoot;
+      const yFt = parseFloat(row[lay.y]) / lay.perFoot;
+      if (isNaN(xFt) || isNaN(yFt)) { bad++; continue; }
+      const fev = parseFloat(row[lay.fev]);
+      const dl = lay.dl >= 0 ? parseFloat(row[lay.dl]) : NaN;
+      out.push({
+        id, xFt, yFt,
+        fev: isFinite(fev) ? fev : null,
+        dl: isFinite(dl) ? dl : null
+      });
+    }
+    return { rows: out, bad };
+  }
+
+  // Load cases claimed by more than one file, as [{ blc, names }].
+  function seisDuplicateCases() {
+    const byBlc = new Map();
+    for (const f of (state.seis || [])) {
+      if (!f.blc) continue;
+      if (!byBlc.has(f.blc)) byBlc.set(f.blc, []);
+      byBlc.get(f.blc).push(f.name);
+    }
+    return [...byBlc.entries()]
+      .filter(([, names]) => names.length > 1)
+      .map(([blc, names]) => ({ blc, names }));
+  }
+
+  function addSeisFiles(fileList) {
+    const files = [...fileList];
+    let pending = files.length;
+    if (!pending) return;
+    for (const file of files) {
+      // Same rule the merge panel uses: a re-drop of the same filename is a
+      // repeat, not a second case.
+      if (state.seis.some(f => f.name === file.name)) { if (--pending === 0) renderSeisPanel(); continue; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        const blc = seisCaseOf(file.name);
+        const parsed = parseSeisText(e.target.result);
+        state.seis.push({
+          name: file.name,
+          blc,
+          caseName: blc ? SEISMIC_BLCS[blc - 1] : '',
+          rows: parsed.rows || [],
+          bad: parsed.bad || 0,
+          error: parsed.error || (blc ? '' : 'filename is not a load case name')
+        });
+        state.seis.sort((a, b) => (a.blc || 99) - (b.blc || 99));
+        if (--pending === 0) renderSeisPanel();
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  function removeSeisFile(name) {
+    state.seis = state.seis.filter(f => f.name !== name);
+    renderSeisPanel();
+  }
+
+  function renderSeisPanel() {
+    const list = document.getElementById('seis-filelist');
+    // Chips are built as DOM nodes, not innerHTML: a chip carries a filename
+    // the user chose, and textContent escapes it inherently.
+    list.replaceChildren(...state.seis.map(f => {
+      const chip = document.createElement('div');
+      chip.className = 'merge-file-chip' + (f.error ? ' invalid' : '');
+      const label = document.createElement('span');
+      label.textContent = f.error ? `${f.name} — ${f.error}` : `${f.caseName} · ${f.name}`;
+      const count = document.createElement('span');
+      count.className = 'chip-count';
+      count.textContent = f.error ? '✕' : String(f.rows.length);
+      const x = document.createElement('button');
+      x.className = 'chip-remove';
+      x.type = 'button';
+      x.textContent = '×';
+      x.addEventListener('click', () => removeSeisFile(f.name));
+      chip.append(label, count, x);
+      return chip;
+    }));
+
+    const zone = document.getElementById('seis-zone');
+    zone.classList.toggle('loaded', state.seis.length > 0);
+
+    const box = document.getElementById('seis-preview');
+    if (state.seis.length === 0) {
+      box.classList.remove('has-content');
+      box.innerHTML = '<span>No files loaded.</span>';
+      updateGenerateButton();
+      return;
+    }
+    box.classList.add('has-content');
+    const dups = seisDuplicateCases();
+    const rows = state.seis.filter(f => !f.error).map(f => {
+      const n = f.rows.filter(r => r.fev !== null && Math.abs(r.fev) > 0).length;
+      return `<div class="entity-row"><span class="entity-name">BLC ${f.blc} · ${escHtml(f.caseName)}</span><span class="entity-count">${n}</span></div>`;
+    });
+    const missing = SEISMIC_FILE_CASES.filter(
+      (n, i) => !state.seis.some(f => f.blc === i + 4 && !f.error));
+    let note = '';
+    if (dups.length > 0) {
+      note = `<div class="entity-row" style="color:#c62828"><span class="entity-name">✕ ${dups.map(d =>
+        `${escHtml(SEISMIC_BLCS[d.blc - 1])}: ${d.names.map(escHtml).join(', ')}`).join(' | ')}</span><span class="entity-count">blocked</span></div>`;
+    } else if (missing.length > 0) {
+      note = `<div class="entity-row"><span class="entity-name">Empty in RISA: ${escHtml(['Ev', ...missing].join(', '))}</span><span class="entity-count">—</span></div>`;
+    }
+    box.innerHTML = `<div class="entity-list">${rows.join('')}${note}</div>`;
+    updateGenerateButton();
+  }
+
+  document.getElementById('seis-input').addEventListener('change', e => {
+    addSeisFiles(e.target.files);
+    e.target.value = '';
+  });
 
   // ---------------------------------------------------------------------------
   // R3D conversion helpers
@@ -2261,6 +2586,54 @@ Engineer
     // point: one node, every load value kept.
     for (const n of notionalNodes) n.nodeIdx = internNode(n.xFt, n.yFt, n.label, LBL_NOTIONAL);
 
+    // 4b. Seismic sheets -> per-case load entries (optional, panel 05)
+    //
+    // The scheme swaps here and only here: with a sheet loaded the file carries
+    // eleven basic load cases and the workbook's 28 combinations; with none it
+    // writes byte-identical output to Rev 33.
+    // Defaulted, not assumed present. generate() is also called by
+    // tools/harness.mjs and tools/browser-harness.mjs, which build their own
+    // state object -- an undefined state.seis threw here and broke every
+    // existing caller, panel 05 or no panel 05.
+    const seisState = state.seis || [];
+    const useSeismic = seisState.length > 0 && seisDuplicateCases().length === 0
+                       && seisState.some(f => !f.error);
+    const seisFiles = useSeismic ? seisState.filter(f => !f.error) : [];
+
+    // DEAD LOAD IS TAKEN ONCE PER NODE, NOT ONCE PER FILE, and this is the
+    // subtle one. Every BRCSEISOUT export of one drawing carries the same Dead
+    // load column, so summing eight dropped files would multiply a stiffener
+    // weight by eight. Keyed on the persistent identifier, which is the thing
+    // that identifies a physical node across the eight files. Two files
+    // disagreeing on one node's dead load is reported, not picked between.
+    const seisDlById = new Map();       // id -> { id, dl, from, xFt, yFt }
+    const seisDlConflicts = [];
+    for (const f of seisFiles) {
+      for (const r of f.rows) {
+        if (r.dl === null || Math.round(r.dl) === 0) continue;
+        const prev = seisDlById.get(r.id);
+        if (prev === undefined) seisDlById.set(r.id, { id: r.id, dl: r.dl, from: f.name, xFt: r.xFt, yFt: r.yFt });
+        else if (Math.round(prev.dl) !== Math.round(r.dl))
+          seisDlConflicts.push(`${r.id} (${prev.from}: ${prev.dl}, ${f.name}: ${r.dl})`);
+      }
+    }
+
+    // A zero or blank F_Ev writes no entry, the same rule the DL/LL path
+    // already applies -- except that this one does NOT round first, so a
+    // fractional seismic load survives. BraceSeismic writes F_Ev at one
+    // decimal from its Rev 13, and rounding it to whole pounds here would
+    // throw that away and drop anything under half a pound entirely.
+    const seisCaseRows = new Map();     // blc -> rows with a load
+    for (const f of seisFiles) seisCaseRows.set(f.blc, f.rows.filter(r => r.fev !== null && r.fev !== 0));
+
+    // Registered at the persistent-ID rank, like a Matched Load CSV row: a
+    // seismic coordinate that coincides with a joint merges onto it, and one
+    // that coincides with nothing gets its own node.
+    for (const rows of seisCaseRows.values())
+      for (const r of rows) r.nodeIdx = internNode(r.xFt, r.yFt, r.id, LBL_LOAD_ID);
+    for (const d of seisDlById.values())
+      d.nodeIdx = internNode(d.xFt, d.yFt, d.id, LBL_LOAD_ID);
+
     // Node table is complete — emit it once, in canonical order.
     const nodeSection = [
       `[NODES] <${nodes.length}>`,
@@ -2286,7 +2659,37 @@ Engineer
     const nolrLoadLines = nolrNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
     const nollLoadLines = nollNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
 
-    const loadCasesSection = [
+    // The seismic scheme's eleven cases. RISA assigns a node load to a case by
+    // ORDER and the per-case count in this section -- the NODE_LOADS lines
+    // themselves carry no case number -- so the two lists below are built from
+    // one array and cannot fall out of step.
+    //
+    // BLC 3 (Ev) is written with zero entries on purpose: BRCSEISOUT cannot
+    // export a case by that name, every seismic combination references it, and
+    // the magnitudes get entered in RISA. Same treatment the notional cases
+    // already get, and the same reason.
+    const seisDlLines = [...seisDlById.values()].map(d => `${d.nodeIdx + 1} 90 ${(-Math.round(d.dl)).toFixed(6)} 76 0 -1 1;`);
+    const seisGroups = SEISMIC_BLCS.map((name, i) => {
+      const blc = i + 1;
+      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: [...dlLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`), ...seisDlLines] };
+      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: llLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`) };
+      const rows = seisCaseRows.get(blc) || [];
+      // VERBATIM, sign and decimal both. BraceSeismic signs F_Ev by which end
+      // of the brace the node is -- positive at the lower, negative at the
+      // upper -- so the negation the DL path applies must NOT happen here.
+      return { blc, name, cat: BLC_CAT_EL, grav: '0.000000', lines: rows.map(r => `${r.nodeIdx + 1} 90 ${r.fev.toFixed(6)} 76 0 -1 1;`) };
+    });
+
+    const seismicLoadCount = seisGroups.slice(2).reduce((a, g) => a + g.lines.length, 0);
+
+    const seismicCasesSection = [
+      `[BASIC_LOAD_CASES] <${seisGroups.length}>`,
+      ...seisGroups.map(g =>
+        `${g.blc} "${pad32(g.name)}" ${g.lines.length} 0 0 0 0 0 ${g.cat} 0.000000 0.000000 ${g.grav} -1 1.000000 ${g.cat};`),
+      '[END_BASIC_LOAD_CASES]'
+    ].join('\n');
+
+    const notionalCasesSection = [
       '[BASIC_LOAD_CASES] <6>',
       `1 "DL                              " ${dlLoads.length} 0 0 0 0 0 1 0.000000 0.000000 -1.000000 -1 1.000000 1;`,
       `2 "LL                              " ${llLoads.length} 0 0 0 0 0 2 0.000000 0.000000 0.000000 -1 1.000000 2;`,
@@ -2297,12 +2700,17 @@ Engineer
       '[END_BASIC_LOAD_CASES]'
     ].join('\n');
 
-    const totalLoads = dlLoads.length + llLoads.length + NN;
-    const loadLines = [
-      ...dlLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`),
-      ...llLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`),
-      ...notrLoadLines, ...notlLoadLines, ...nolrLoadLines, ...nollLoadLines
-    ];
+    const loadCasesSection = useSeismic ? seismicCasesSection : notionalCasesSection;
+    const totalLoads = useSeismic
+      ? seisGroups.reduce((a, g) => a + g.lines.length, 0)
+      : dlLoads.length + llLoads.length + NN;
+    const loadLines = useSeismic
+      ? seisGroups.flatMap(g => g.lines)
+      : [
+        ...dlLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`),
+        ...llLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`),
+        ...notrLoadLines, ...notlLoadLines, ...nolrLoadLines, ...nollLoadLines
+      ];
     const loadSection = [
       `[NODE_LOADS] <${totalLoads}>`,
       ...loadLines,
@@ -2323,6 +2731,24 @@ Engineer
       warnings.push(`${pinPointOffGeometry} of ${pinPointCount} Pin BC points don't land on or along any HSS/Load geometry at all — worth checking these for a misplaced point (Boundaries: +${pinPointOffGeometry}). Added as standalone nodes — see Download Unconnected Pins DXF`);
     if (badLoadRows > 0)
       warnings.push(`${badLoadRows} Matched Load CSV row${badLoadRows === 1 ? '' : 's'} had a blank or non-numeric coordinate and ${badLoadRows === 1 ? 'was' : 'were'} skipped — check ${loadLayout.coords}. Their loads are NOT in the model.`);
+    if (useSeismic) {
+      const named = seisGroups.slice(3).filter(g => g.lines.length > 0).map(g => g.name);
+      const empty = ['Ev', ...seisGroups.slice(3).filter(g => g.lines.length === 0).map(g => g.name)];
+      warnings.push(`Seismic scheme active — the file carries 11 basic load cases and the workbook's 28 combinations INSTEAD of the notional 6 and 26. Filled from a sheet: ${named.length ? named.join(', ') : 'none'}. Written empty for editing in RISA: ${empty.join(', ')}.`);
+      // The two schemes are alternatives, so a notional CSV loaded alongside a
+      // seismic sheet contributes nodes and no loads. Silent would be wrong:
+      // the nodes are visibly in the model and the loads visibly are not.
+      if (NN > 0)
+        warnings.push(`${NN} notional load node${NN === 1 ? '' : 's'} from all NOs.csv ${NN === 1 ? 'is' : 'are'} in the model as nodes but carry NO load case — the seismic scheme replaces the notional one, and NoTR/NoTL/NoLR/NoLL do not exist in it. Remove the seismic sheets to get the notional cases back.`);
+      if (seisDlConflicts.length > 0)
+        warnings.push(`${seisDlConflicts.length} node${seisDlConflicts.length === 1 ? '' : 's'} carry a different Dead load in different seismic sheets — the first sheet in load-case order wins: ${seisDlConflicts.slice(0, 5).join('; ')}${seisDlConflicts.length > 5 ? ' …' : ''}`);
+      const badSeis = seisFiles.reduce((a, f) => a + f.bad, 0);
+      if (badSeis > 0)
+        warnings.push(`${badSeis} seismic sheet row${badSeis === 1 ? '' : 's'} had a blank or non-numeric uscX/uscY and ${badSeis === 1 ? 'was' : 'were'} skipped. Their loads are NOT in the model.`);
+    }
+    const seisRejected = seisState.filter(f => f.error);
+    if (seisRejected.length > 0)
+      warnings.push(`${seisRejected.length} seismic sheet${seisRejected.length === 1 ? '' : 's'} ignored: ${seisRejected.map(f => `${f.name} (${f.error})`).join('; ')}. A sheet must be named for one of ${SEISMIC_FILE_CASES.join(', ')} and its header must name F_Ev, uscX and uscY.`);
     if (unknownNotionalLayers.size > 0) {
       const detail = [...unknownNotionalLayers.entries()].map(([l, n]) => `"${l}" ×${n}`).join(', ');
       const total = [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0);
@@ -2338,9 +2764,11 @@ Engineer
       membersSection + '\n\n\n' +
       loadCasesSection + '\n\n\n' +
       loadSection + '\n\n\n' +
-      R3D_TAIL;
+      R3D_TAIL_HEAD +
+      loadCombinationsSection(useSeismic ? seismicComboLines() : NOTIONAL_COMBO_LINES) +
+      R3D_TAIL_FOOT;
 
-    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
+    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, seismicLoads: useSeismic ? seismicLoadCount : 0, seismicCases: useSeismic ? seisFiles.length : 0, useSeismic, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
   }
 
   // === CORE-END ===
@@ -2379,6 +2807,7 @@ Engineer
       document.getElementById('stat-bcs').textContent       = result.bcs + (result.bcOnlyNodes ? ` +${result.bcOnlyNodes}` : '');
       document.getElementById('stat-loads').textContent     = result.loads;
       document.getElementById('stat-notional').textContent  = result.notionalNodes || '—';
+      document.getElementById('stat-seismic').textContent   = result.useSeismic ? `${result.seismicLoads} / ${result.seismicCases}` : '—';
 
       const warningsArea = document.getElementById('warnings-area');
       if (result.warnings.length > 0) {
