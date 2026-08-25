@@ -1054,7 +1054,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 34;
+  const APP_REV = 35;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1890,7 +1890,7 @@ Engineer
       const key = ji1 < ji2 ? `${ji1},${ji2}` : `${ji2},${ji1}`;
       if (seenPairs.has(key)) continue;
       seenPairs.add(key);
-      if (line.layer === '2C4X5.4X6') c2c4++; else p1001++;
+      if (isDoubleChannel(line.layer)) c2c4++; else p1001++;
     }
     const box = document.getElementById('dxf-preview');
     if (p1001 + c2c4 === 0) { box.innerHTML = '<span>No LINE entities found.</span>'; return; }
@@ -2184,6 +2184,28 @@ Engineer
   // ---------------------------------------------------------------------------
   // R3D conversion helpers
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Which members are the double channel
+  //
+  // The DXF names these layers by MEMBER LENGTH -- "HS - B2B 2'", "HS - B2B
+  // 8.0'", "HS - B2B 12'", "HS - B2B 20'" -- not by the RISA section they map
+  // to. Up to Rev 34 this branch tested `layer === '2C4X5.4X6'`, a name no
+  // drawing on disk has ever used, so every member fell through to P1001_7FT
+  // and the Double Channel path had almost certainly never produced a line.
+  //
+  // Matched as a FAMILY, on the "HS - B2B" prefix, because the trailing length
+  // varies per layer and a new one appears whenever a new length is drawn. An
+  // exact list would silently drop the next length someone adds, which is the
+  // failure this is replacing.
+  //
+  // The literal section name still matches, so a DXF that does name its layer
+  // after the section keeps working.
+  const DOUBLE_CHANNEL_LAYER = /^hs\s*-\s*b2b\b/;
+  function isDoubleChannel(layer) {
+    const n = String(layer || '').trim().toLowerCase();
+    return DOUBLE_CHANNEL_LAYER.test(n) || n === '2c4x5.4x6';
+  }
+
   function pad32(s) {
     return String(s).padEnd(32, ' ');
   }
@@ -2532,12 +2554,12 @@ Engineer
       '[MEMBERS]', '',
       `[.MEMBERS_MAIN_DATA] <${members.length}>`,
       ...members.map((m, i) => {
-        const is2C = m.layer === '2C4X5.4X6';
+        const is2C = isDoubleChannel(m.layer);
         return `"${mNames[i]}" ${is2C ? '"Double Channel                  "' : '"None                            "'} "${pad32(is2C ? '2C4X5.4X6' : 'P1001_7FT')}" ${m.nodeI} ${m.nodeJ} ${is2C ? MF_2C4 : MF};`;
       }),
       '[.END_MEMBERS_MAIN_DATA]', '',
       `[.MEMBERS_DESIGN_PARAMETERS] <${members.length}>`,
-      ...members.map((m, i) => `"${mNames[i]}" ${m.layer === '2C4X5.4X6' ? DP_2C4 : DP};`),
+      ...members.map((m, i) => `"${mNames[i]}" ${isDoubleChannel(m.layer) ? DP_2C4 : DP};`),
       '[.END_MEMBERS_DESIGN_PARAMETERS]', '',
       `[.MEMBERS_BRB_DATA] <${members.length}>`,
       ...members.map((_, i) => `"${mNames[i]}" 38.000000 46.000000 0 -1.000000 -1.000000 -1.000000 -1.000000;`),
