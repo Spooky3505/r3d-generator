@@ -1054,7 +1054,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 35;
+  const APP_REV = 36;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1709,26 +1709,28 @@ Engineer
   // notional block above -- comboLine(desc, 1, [[1,1]]) reproduces its first
   // line character for character, which the harness asserts.
   //
-  // WHICH FLAG IS SOLVE. All 26 notional lines carry an identical flag string,
-  // so the file alone cannot say. Flags 2, 3 and 4 read 1, 1, 0, which matches
-  // the LC sheet's Solve=1 / P-Delta=Y / SRSS=blank exactly; reading the FIRST
-  // three instead gives Solve=0 and SRSS=1, i.e. a working model that solves
-  // nothing and SRSS-combines everything. Two constraints fit one reading and
-  // neither fits the other, so flag 2 is Solve. It is still an inference from
-  // one sample: if RISA shows all 28 combinations solving, this is the constant
-  // to look at.
+  // WHICH FLAG IS WHICH -- settled 2026-08-25 by a screenshot of RISA's own
+  // Load Combinations grid after importing a generated file. Up to Rev 34 this
+  // was an inference from a single sample and it was WRONG: flag 2 is P-Delta,
+  // not Solve. Solve is the leading 1 of COMBO_FLAGS_TAIL, which is why RISA
+  // showed Solve ticked on all 28 rows while twelve came in with P-Delta blank.
+  //
+  // P-Delta is now written Y on every row, on the user's instruction. The LC
+  // sheet leaves it blank on twelve rows; unlike a description, this one is not
+  // reproduced verbatim, because a combination that skips P-Delta is a
+  // different analysis rather than a cosmetic difference.
   const COMBO_FLAGS_HEAD = '0';
   const COMBO_FLAGS_TAIL = '1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1';
   const COMBO_MAX_PAIRS = 10;
 
-  function comboLine(desc, solve, pairs) {
+  function comboLine(desc, pDelta, pairs) {
     const slots = [];
     for (let i = 0; i < COMBO_MAX_PAIRS; i++) {
       const pr = pairs[i];
       slots.push(pr ? `"${pad32(String(pr[0]))}" ${pr[1].toFixed(6)}`
                     : `"${pad32('')}" 0.000000`);
     }
-    return `"${String(desc).padEnd(79)}" ${COMBO_FLAGS_HEAD} ${solve} ${COMBO_FLAGS_TAIL} ${slots.join(' ')};`;
+    return `"${String(desc).padEnd(79)}" ${COMBO_FLAGS_HEAD} ${pDelta} ${COMBO_FLAGS_TAIL} ${slots.join(' ')};`;
   }
 
   // Descriptions are reproduced VERBATIM, defects included: row 20 reads
@@ -1739,38 +1741,38 @@ Engineer
   // than one that carries the workbook's own typo. The user's call; the page
   // flags both so the workbook is what gets corrected.
   const SEISMIC_COMBOS = [
-    { d: "DL", solve: 1, p: [[1, 1.0]] },
-    { d: "D + L", solve: 1, p: [[1, 1.0], [2, 1.0]] },
-    { d: "D + 0.75L", solve: 1, p: [[1, 1.0], [2, 0.75]] },
-    { d: "0.6D", solve: 1, p: [[1, 0.6]] },
-    { d: "D + 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", solve: 1, p: [[1, 1.0], [3, 0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
-    { d: "D + 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", solve: 1, p: [[1, 1.0], [3, 0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
-    { d: "D + 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", solve: 1, p: [[1, 1.0], [3, 0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
-    { d: "D + 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", solve: 1, p: [[1, 1.0], [3, 0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
-    { d: "D + 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", solve: 0, p: [[1, 1.0], [3, 0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
-    { d: "D + 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", solve: 0, p: [[1, 1.0], [3, 0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
-    { d: "D + 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", solve: 0, p: [[1, 1.0], [3, 0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
-    { d: "D + 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", solve: 0, p: [[1, 1.0], [3, 0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
-    { d: "D + 0.525Ev + 0.525EhTR + 0.75L + 0.525REhTR - 0.525REhTL", solve: 1, p: [[1, 1.0], [3, 0.525], [4, 0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
-    { d: "D + 0.525Ev + 0.525EhTL + 0.75L - 0.525REhTR + 0.525REhTL", solve: 1, p: [[1, 1.0], [3, 0.525], [5, 0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
-    { d: "D + 0.525Ev + 0.525EhLR + 0.75L + 0.525REhLR - 0.525REhLL", solve: 1, p: [[1, 1.0], [3, 0.525], [6, 0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
-    { d: "D + 0.525Ev + 0.525EhLL + 0.75L - 0.525REhLR + 0.525REhLL", solve: 1, p: [[1, 1.0], [3, 0.525], [7, 0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
-    { d: "D + 0.525Ev - 0.525EhTR + 0.75L - 0.525REhTR + 0.525REhTL", solve: 0, p: [[1, 1.0], [3, 0.525], [4, -0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
-    { d: "D + 0.525Ev - 0.525EhTL + 0.75L + 0.525REhTR - 0.525REhTL", solve: 0, p: [[1, 1.0], [3, 0.525], [5, -0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
-    { d: "D + 0.525Ev - 0.525EhLR + 0.75L - 0.525REhTLR + 0.525REhLL", solve: 0, p: [[1, 1.0], [3, 0.525], [6, -0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
-    { d: "D + 0.525Ev - 0.525EhLL + 0.75L + 0.525REhLR - 0.525REhLL", solve: 0, p: [[1, 1.0], [3, 0.525], [7, -0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
-    { d: "0.6D - 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", solve: 1, p: [[1, 0.6], [3, -0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
-    { d: "0.6D - 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", solve: 1, p: [[1, 0.6], [3, -0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
-    { d: "0.6D - 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", solve: 1, p: [[1, 0.6], [3, -0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
-    { d: "0.6D - 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", solve: 1, p: [[1, 0.6], [3, -0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", solve: 0, p: [[1, 0.6], [3, -0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", solve: 0, p: [[1, 0.6], [3, -0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", solve: 0, p: [[1, 0.6], [3, -0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", solve: 0, p: [[1, 0.6], [3, -0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
+    { d: "DL", pDelta: 1, p: [[1, 1.0]] },
+    { d: "D + L", pDelta: 1, p: [[1, 1.0], [2, 1.0]] },
+    { d: "D + 0.75L", pDelta: 1, p: [[1, 1.0], [2, 0.75]] },
+    { d: "0.6D", pDelta: 1, p: [[1, 0.6]] },
+    { d: "D + 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
+    { d: "D + 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
+    { d: "D + 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
+    { d: "D + 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
+    { d: "D + 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
+    { d: "D + 0.525Ev + 0.525EhTR + 0.75L + 0.525REhTR - 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [4, 0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
+    { d: "D + 0.525Ev + 0.525EhTL + 0.75L - 0.525REhTR + 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [5, 0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
+    { d: "D + 0.525Ev + 0.525EhLR + 0.75L + 0.525REhLR - 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [6, 0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
+    { d: "D + 0.525Ev + 0.525EhLL + 0.75L - 0.525REhLR + 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [7, 0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhTR + 0.75L - 0.525REhTR + 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [4, -0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhTL + 0.75L + 0.525REhTR - 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [5, -0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
+    { d: "D + 0.525Ev - 0.525EhLR + 0.75L - 0.525REhTLR + 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [6, -0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhLL + 0.75L + 0.525REhLR - 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [7, -0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
+    { d: "0.6D - 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
   ];
 
   function seismicComboLines() {
-    return SEISMIC_COMBOS.map(c => comboLine(c.d, c.solve, c.p));
+    return SEISMIC_COMBOS.map(c => comboLine(c.d, c.pDelta, c.p));
   }
 
   function loadCombinationsSection(lines) {
