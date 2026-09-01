@@ -1083,7 +1083,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 38;
+  const APP_REV = 39;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1662,13 +1662,16 @@ Engineer
 "0.6D  - 0.7NoLR                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "5                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;
 "0.6D  - 0.7NoLL                                                                " 0 1 1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1 "1                               " 0.600000 "6                               " -0.700000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000 "                                " 0.000000;`.split('\n');
 
+  // NO [SAVED_SELECTION_STATES] (Rev 39). The template carried two states left
+  // over from whoever's model it was cut from -- "Risa crossing nodes" and
+  // "Ad 2ft to Stanalone nodes" -- and every generated file shipped them, so
+  // they turned up in RISA's Selection States dialog on a brand-new model.
+  // The section is REMOVED rather than emptied to `<0>`:
+  // `raw/CAZ5-VAN-MG-00-M3-3B00-RISA model 7-8_FINAL.r3d` has no such section
+  // at all, going straight from [END_LOAD_COMBINATIONS] to [FILE_INFORMATION],
+  // so its absence is what a real RISA file looks like rather than a guess at
+  // what the reader tolerates.
   const R3D_TAIL_FOOT = `
-
-
-[SAVED_SELECTION_STATES] <2>
-"Risa crossing nodes                                                                                                                                                                                     ";
-"Ad 2ft to Stanalone nodes                                                                                                                                                                               ";
-[END_SAVED_SELECTION_STATES]
 
 
 [FILE_INFORMATION]
