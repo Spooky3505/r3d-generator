@@ -2883,7 +2883,7 @@ Engineer
     let seismicCaseMerges = 0;
     const seisGroups = SEISMIC_BLCS.map((name, i) => {
       const blc = i + 1;
-      // Both dead-load sources summed together, per node -- see sumPerNode.
+      // Both dead-load sources summed together, per node -- see collapse().
       if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: dlSummed.map(loadLine) };
       // BLC 3 (Ev) is the dead load scaled by the Ev factor from panel 05.
       //
