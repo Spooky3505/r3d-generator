@@ -1101,7 +1101,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 43;
+  const APP_REV = 44;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -3241,8 +3241,19 @@ Engineer
     // the sample that is 1291 -- 1239 exact pins (4 4 4 0 0 0), 49 fully fixed
     // (4 4 4 4 4 4), 2 pin+rX and 1 pin+rZ. The one node restraining nothing
     // is excluded.
-    return flags.slice(0, 3).every(f => f === '4') ? 'restrained' : 'free';
+    const held = flags.slice(0, 3).filter(f => f === '4').length;
+    if (held === 3) return 'restrained';
+    // Rev 44 splits what used to be one 'free' bucket. Up to Rev 43 anything
+    // short of all three translations was reported as "restrain no
+    // translation", which is FALSE for a node holding two of them -- a roller
+    // that still bears vertically. No such row exists in the sample, so the
+    // message was accurate on the only data it had ever seen and would have
+    // started lying on the first model that had one. Named separately so the
+    // warning can say what each node actually holds.
+    return held === 0 ? 'none' : 'partial';
   }
+  // Which of X, Y, Z a row holds, for the partial-restraint warning.
+  const heldAxes = flags => ['X', 'Y', 'Z'].filter((_, i) => flags[i] === '4').join('+');
 
   // Pull one bracketed section's body out of an .r3d. Sections are delimited by
   // `[NAME] <count>` and `[END_NAME]`, both at the start of a line.
@@ -3286,18 +3297,37 @@ Engineer
     // off-by-one here would move every point onto its neighbour ~6.25 ft away
     // -- plausible-looking and wrong, so it is checked rather than assumed.
     const pins = [];
-    const counts = { restrained: 0, free: 0, unknown: 0 };
+    const counts = { restrained: 0, none: 0, partial: 0, unknown: 0 };
     const unknownRows = [];
+    // Labels of the rows that were NOT exported, so the page can name them
+    // rather than only counting them. The user had to ask twice which node a
+    // count referred to; a count without a name is not actionable.
+    const noneNodes = [], partialNodes = [];
     let badIndex = 0;
     for (const row of bcSec.rows) {
       const p = row.replace(/;$/, '').trim().split(/\s+/);
       const idx = Number(p[0]);
       if (!Number.isInteger(idx) || idx < 1 || idx > nodes.length) { badIndex++; continue; }
-      const kind = classifyBc(p.slice(1, 7));
+      const flags = p.slice(1, 7);
+      const kind = classifyBc(flags);
       counts[kind]++;
+      const label = nodes[idx - 1].label || `#${idx}`;
       if (kind === 'unknown') { if (unknownRows.length < 10) unknownRows.push(row); continue; }
-      if (kind === 'restrained') pins.push(nodes[idx - 1]);
+      if (kind === 'none') { noneNodes.push(label); continue; }
+      if (kind === 'partial') { partialNodes.push(`${label} (holds ${heldAxes(flags)})`); continue; }
+      pins.push(nodes[idx - 1]);
     }
+    // Every excluded node is NAMED, all of them, not a sample. A long list is
+    // the honest output for a model with many of them, and the label is what
+    // RISA's Boundary Conditions grid is searched by.
+    if (noneNodes.length)
+      warnings.push(`${noneNodes.length} boundary row${noneNodes.length === 1 ? '' : 's'} restrain${noneNodes.length === 1 ? 's' : ''} nothing — `
+        + `every direction is free, so ${noneNodes.length === 1 ? 'it is' : 'they are'} not a support and ${noneNodes.length === 1 ? 'is' : 'are'} NOT exported. `
+        + `Check in RISA whether ${noneNodes.length === 1 ? 'it was' : 'they were'} meant to be pinned: ${noneNodes.join(', ')}`);
+    if (partialNodes.length)
+      warnings.push(`${partialNodes.length} boundary row${partialNodes.length === 1 ? '' : 's'} hold${partialNodes.length === 1 ? 's' : ''} only some of the three translations, `
+        + `so ${partialNodes.length === 1 ? 'it does' : 'they do'} not meet the "all three held" rule and ${partialNodes.length === 1 ? 'is' : 'are'} NOT exported. `
+        + `${partialNodes.join(', ')}`);
     if (badIndex)
       warnings.push(`${badIndex} boundary row(s) point outside [NODES] (1..${nodes.length}) and were skipped`);
     if (counts.unknown)
@@ -3315,7 +3345,7 @@ Engineer
         + `${Math.max(...offPlane.map(n => n.y)).toFixed(3)} ft). This model is NOT flat in Y — `
         + `the DXF takes X and Z and the Y is discarded. Check the vertical axis before using it.`);
 
-    return { nodes, pins, counts, warnings, totalBc: bcSec.rows.length };
+    return { nodes, pins, counts, warnings, noneNodes, partialNodes, totalBc: bcSec.rows.length };
   }
 
   // Bare POINT entities on one layer, no HEADER and no TABLES -- the same
@@ -3380,7 +3410,7 @@ Engineer
       `<div><strong>${xmlEsc(file.name)}</strong></div>`
       + `<div>${r.nodes.length} nodes, ${r.totalBc} boundary conditions</div>`
       + `<div><strong>${r.pins.length}</strong> restrained points to export `
-      + `(${r.counts.free} restrain no translation, ${r.counts.unknown} unrecognised)</div>`;
+      + `(${r.counts.none} restrain nothing, ${r.counts.partial} partly restrained, ${r.counts.unknown} unrecognised)</div>`;
     if (r.warnings.length) {
       pinWarnings.innerHTML = r.warnings.map(w => `<div>⚠ ${xmlEsc(w)}</div>`).join('');
       pinWarnings.style.display = 'block';
