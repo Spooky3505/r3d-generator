@@ -1083,7 +1083,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 37;
+  const APP_REV = 38;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1732,6 +1732,20 @@ Engineer
   // factor, every load and every result is unaffected. One edit fixes it the
   // moment the real code is known. On the checklist for the first import.
   const BLC_CAT_DL = 1, BLC_CAT_LL = 2, BLC_CAT_EL = 59;
+  // RISA's category code for "EL - Earthquake Load" is 3. Read out of
+  // `raw/CAZ5-VAN-MG-00-M3-3B00-RISA model 7-8_FINAL.r3d`, where all nine
+  // seismic cases carry 3, and corroborated by the BLC sheet of
+  // `raw/34310 CAZ5_ Ground 3B_JOIST LOADS_rev1.xlsx`, which names cases 3-11
+  // "EL - Earthquake Load". Up to Rev 37 the tool wrote 59 for all nine and
+  // RISA's Basic Load Cases grid showed them as NL.
+  //
+  // APPLIED TO BLCs 4-11 ONLY. BLC 3 (Ev) keeps 59 on the user's explicit
+  // instruction, given after it was pointed out that the tool writes the same
+  // code for all nine and that Ev reading EL in their screenshot therefore
+  // means they had changed it by hand. So a fresh import still shows Ev as NL
+  // and still needs that one dropdown set. Deliberate, not an oversight.
+  const BLC_CAT_EL_TRUE = 3;
+  const catForSeismicBlc = blc => (blc === 3 ? BLC_CAT_EL : BLC_CAT_EL_TRUE);
 
   // A combination line: 79-char description, 23 flags, then exactly ten
   // 32-char BLC/factor pairs, the unused ones empty. Verified against the
@@ -1748,18 +1762,31 @@ Engineer
   // sheet leaves it blank on twelve rows; unlike a description, this one is not
   // reproduced verbatim, because a combination that skips P-Delta is a
   // different analysis rather than a cosmetic difference.
+  //
+  // SOLVE IS PER-ROW AGAIN as of Rev 38. Rev 36 identified it as the leading 1
+  // of COMBO_FLAGS_TAIL and wrote it as a constant 1 on all 28 rows. The user
+  // then supplied a RISA Load Combinations screenshot with Solve UNTICKED on
+  // eleven rows and asked for it matched as shown, so that leading digit is
+  // now written from the table below instead of being hardcoded.
+  //
+  // NOTE the reference disagreement, unresolved: the LC sheet of
+  // `raw/34310 CAZ5_ Ground 3B_JOIST LOADS_rev1.xlsx` has Solve = 1 on all 26
+  // of ITS rows (and its columns sit one to the right of the workbook Rev 34
+  // read: A=LC number, B=Description, C=Solve, D=P-Delta). The screenshot is
+  // the authority here because the user named it as one; the workbook is not
+  // read for this value.
   const COMBO_FLAGS_HEAD = '0';
-  const COMBO_FLAGS_TAIL = '1 0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1';
+  const COMBO_FLAGS_TAIL = '0 0 1.000000 1.000000 1.000000 0 0 1 1 1 1 1 1 1 -1 1 1 1 0 1';
   const COMBO_MAX_PAIRS = 10;
 
-  function comboLine(desc, pDelta, pairs) {
+  function comboLine(desc, pDelta, solve, pairs) {
     const slots = [];
     for (let i = 0; i < COMBO_MAX_PAIRS; i++) {
       const pr = pairs[i];
       slots.push(pr ? `"${pad32(String(pr[0]))}" ${pr[1].toFixed(6)}`
                     : `"${pad32('')}" 0.000000`);
     }
-    return `"${String(desc).padEnd(79)}" ${COMBO_FLAGS_HEAD} ${pDelta} ${COMBO_FLAGS_TAIL} ${slots.join(' ')};`;
+    return `"${String(desc).padEnd(79)}" ${COMBO_FLAGS_HEAD} ${pDelta} ${solve} ${COMBO_FLAGS_TAIL} ${slots.join(' ')};`;
   }
 
   // Descriptions are reproduced VERBATIM, defects included: row 20 reads
@@ -1769,39 +1796,47 @@ Engineer
   // description, and a generated file that differs from the workbook is worse
   // than one that carries the workbook's own typo. The user's call; the page
   // flags both so the workbook is what gets corrected.
+  // `solve` is written VERBATIM from the RISA Load Combinations grid the user
+  // supplied on 2026-09-01: unticked on rows 9-12, 17-20 and 26-28, ticked on
+  // the other seventeen. Eleven unticked, not twelve -- row 25
+  // ("0.6D - 0.7Ev - 0.7EhTR ...") is ticked although it is the first of the
+  // sign-reversed group of four, which breaks the groups-of-four pattern the
+  // other two groups follow. That asymmetry was put to the user against the
+  // clean twelve-row alternative and they confirmed the screenshot as shown,
+  // so it is reproduced rather than tidied.
   const SEISMIC_COMBOS = [
-    { d: "DL", pDelta: 1, p: [[1, 1.0]] },
-    { d: "D + L", pDelta: 1, p: [[1, 1.0], [2, 1.0]] },
-    { d: "D + 0.75L", pDelta: 1, p: [[1, 1.0], [2, 0.75]] },
-    { d: "0.6D", pDelta: 1, p: [[1, 0.6]] },
-    { d: "D + 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
-    { d: "D + 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
-    { d: "D + 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
-    { d: "D + 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
-    { d: "D + 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
-    { d: "D + 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
-    { d: "D + 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
-    { d: "D + 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
-    { d: "D + 0.525Ev + 0.525EhTR + 0.75L + 0.525REhTR - 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [4, 0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
-    { d: "D + 0.525Ev + 0.525EhTL + 0.75L - 0.525REhTR + 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [5, 0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
-    { d: "D + 0.525Ev + 0.525EhLR + 0.75L + 0.525REhLR - 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [6, 0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
-    { d: "D + 0.525Ev + 0.525EhLL + 0.75L - 0.525REhLR + 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [7, 0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
-    { d: "D + 0.525Ev - 0.525EhTR + 0.75L - 0.525REhTR + 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [4, -0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
-    { d: "D + 0.525Ev - 0.525EhTL + 0.75L + 0.525REhTR - 0.525REhTL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [5, -0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
-    { d: "D + 0.525Ev - 0.525EhLR + 0.75L - 0.525REhTLR + 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [6, -0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
-    { d: "D + 0.525Ev - 0.525EhLL + 0.75L + 0.525REhLR - 0.525REhLL", pDelta: 1, p: [[1, 1.0], [3, 0.525], [7, -0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
-    { d: "0.6D - 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
-    { d: "0.6D - 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
-    { d: "0.6D - 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
-    { d: "0.6D - 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
-    { d: "0.6D - 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", pDelta: 1, p: [[1, 0.6], [3, -0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
+    { d: "DL", pDelta: 1, solve: 1, p: [[1, 1.0]] },
+    { d: "D + L", pDelta: 1, solve: 1, p: [[1, 1.0], [2, 1.0]] },
+    { d: "D + 0.75L", pDelta: 1, solve: 1, p: [[1, 1.0], [2, 0.75]] },
+    { d: "0.6D", pDelta: 1, solve: 1, p: [[1, 0.6]] },
+    { d: "D + 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
+    { d: "D + 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
+    { d: "D + 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
+    { d: "D + 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
+    { d: "D + 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
+    { d: "D + 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
+    { d: "D + 0.525Ev + 0.525EhTR + 0.75L + 0.525REhTR - 0.525REhTL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.525], [4, 0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
+    { d: "D + 0.525Ev + 0.525EhTL + 0.75L - 0.525REhTR + 0.525REhTL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.525], [5, 0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
+    { d: "D + 0.525Ev + 0.525EhLR + 0.75L + 0.525REhLR - 0.525REhLL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.525], [6, 0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
+    { d: "D + 0.525Ev + 0.525EhLL + 0.75L - 0.525REhLR + 0.525REhLL", pDelta: 1, solve: 1, p: [[1, 1.0], [3, 0.525], [7, 0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhTR + 0.75L - 0.525REhTR + 0.525REhTL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.525], [4, -0.525], [2, 0.75], [8, -0.525], [9, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhTL + 0.75L + 0.525REhTR - 0.525REhTL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.525], [5, -0.525], [2, 0.75], [8, 0.525], [9, -0.525]] },
+    { d: "D + 0.525Ev - 0.525EhLR + 0.75L - 0.525REhTLR + 0.525REhLL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.525], [6, -0.525], [2, 0.75], [10, -0.525], [11, 0.525]] },
+    { d: "D + 0.525Ev - 0.525EhLL + 0.75L + 0.525REhLR - 0.525REhLL", pDelta: 1, solve: 0, p: [[1, 1.0], [3, 0.525], [7, -0.525], [2, 0.75], [10, 0.525], [11, -0.525]] },
+    { d: "0.6D - 0.7Ev + 0.7EhTR + 0.7REhTR - 0.7REhTL", pDelta: 1, solve: 1, p: [[1, 0.6], [3, -0.7], [4, 0.7], [8, 0.7], [9, -0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhTL - 0.7REhTR + 0.7REhTL", pDelta: 1, solve: 1, p: [[1, 0.6], [3, -0.7], [5, 0.7], [8, -0.7], [9, 0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhLR + 0.7REhLR - 0.7 REhLL", pDelta: 1, solve: 1, p: [[1, 0.6], [3, -0.7], [6, 0.7], [10, 0.7], [11, -0.7]] },
+    { d: "0.6D - 0.7Ev + 0.7EhLL - 0.7REhLR + 0.7REhLL", pDelta: 1, solve: 1, p: [[1, 0.6], [3, -0.7], [7, 0.7], [10, -0.7], [11, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhTR - 0.7REhTR + 0.7REhTL", pDelta: 1, solve: 1, p: [[1, 0.6], [3, -0.7], [4, -0.7], [8, -0.7], [9, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhTL + 0.7REhTR - 0.7REhTL", pDelta: 1, solve: 0, p: [[1, 0.6], [3, -0.7], [5, -0.7], [8, 0.7], [9, -0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhLR - 0.7REhLR + 0.7REhLL", pDelta: 1, solve: 0, p: [[1, 0.6], [3, -0.7], [6, -0.7], [10, -0.7], [11, 0.7]] },
+    { d: "0.6D - 0.7Ev - 0.7EhLL + 0.7REhLR - 0.7 REhLL", pDelta: 1, solve: 0, p: [[1, 0.6], [3, -0.7], [7, -0.7], [10, 0.7], [11, -0.7]] },
   ];
 
   function seismicComboLines() {
-    return SEISMIC_COMBOS.map(c => comboLine(c.d, c.pDelta, c.p));
+    return SEISMIC_COMBOS.map(c => comboLine(c.d, c.pDelta, c.solve, c.p));
   }
 
   function loadCombinationsSection(lines) {
@@ -2720,13 +2755,51 @@ Engineer
     const llLoads = loadNodes.filter(n => Math.round(n.ll) !== 0);
     const zeroDlRows = loadNodes.length - dlLoads.length;
     const zeroLlRows = loadNodes.length - llLoads.length;
-    // Every load entry points at its node's canonical index. Two rows that
-    // merged onto one node keep both entries — RISA sums them — so no value is
-    // dropped and both persistent IDs stay traceable.
-    const notrLoadLines = notrNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
-    const notlLoadLines = notlNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
-    const nolrLoadLines = nolrNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
-    const nollLoadLines = nollNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
+    // ONE LOAD ENTRY PER NODE PER CASE (Rev 38).
+    //
+    // Two source rows within 1mm of each other intern to the SAME node. Up to
+    // Rev 37 each row kept its own load entry, on the reasoning that RISA sums
+    // them anyway so nothing is lost. It does sum them, but the user's RISA
+    // Nodal Loads grid then shows one node label carrying two loads in a single
+    // case -- rows 134-142 of the screenshot supplied on 2026-09-01 -- which is
+    // unreadable when checking a model by eye and is what this fixes.
+    //
+    // Summed, not deduplicated: both rows are real loads landing on one point,
+    // so the node must carry their total. Dropping either would lose force.
+    //
+    // Applies to EVERY case including the seismic ones, on the user's explicit
+    // instruction, taken after it was pointed out that BraceSeismic signs F_Ev
+    // by which end of a brace a node sits at, so two seismic entries on one
+    // node can be equal and opposite and will now sum to zero rather than
+    // appearing as two rows. `seismicCancelled` counts exactly that case so it
+    // is visible rather than silent.
+    //
+    // Case 1 (DL) is the one that actually needed this: it merges the Matched
+    // Load CSV's dead loads with the seismic sheets' `Dead load` column, and a
+    // node present in both got two DL entries. Summing has to happen ACROSS
+    // both sources, not within each, which is why the entry lists are
+    // concatenated before being summed rather than after.
+    let mergedLoadEntries = 0;
+    let seismicCancelled = 0;
+    function sumPerNode(entries) {
+      // Insertion order = first appearance, so the emitted order matches what
+      // the old code produced for every node that was never duplicated.
+      const byNode = new Map();
+      for (const e of entries) {
+        if (byNode.has(e.nodeIdx)) { byNode.set(e.nodeIdx, byNode.get(e.nodeIdx) + e.mag); mergedLoadEntries++; }
+        else byNode.set(e.nodeIdx, e.mag);
+      }
+      return [...byNode].map(([nodeIdx, mag]) => ({ nodeIdx, mag }));
+    }
+    const loadLine = e => `${e.nodeIdx + 1} 89 ${e.mag.toFixed(6)} 76 0 -1 1;`;
+    const atNode = (list, mag) => list.map(n => ({ nodeIdx: n.nodeIdx, mag: mag(n) }));
+
+    // Notional loads are written at 0 for editing in RISA, so there is no
+    // magnitude to add -- but two rows on one node still produced two lines.
+    const notrLoadLines = sumPerNode(atNode(notrNodes, () => 0)).map(loadLine);
+    const notlLoadLines = sumPerNode(atNode(notlNodes, () => 0)).map(loadLine);
+    const nolrLoadLines = sumPerNode(atNode(nolrNodes, () => 0)).map(loadLine);
+    const nollLoadLines = sumPerNode(atNode(nollNodes, () => 0)).map(loadLine);
 
     // The seismic scheme's eleven cases. RISA assigns a node load to a case by
     // ORDER and the per-case count in this section -- the NODE_LOADS lines
@@ -2737,16 +2810,21 @@ Engineer
     // export a case by that name, every seismic combination references it, and
     // the magnitudes get entered in RISA. Same treatment the notional cases
     // already get, and the same reason.
-    const seisDlLines = [...seisDlById.values()].map(d => `${d.nodeIdx + 1} 89 ${(-Math.round(d.dl)).toFixed(6)} 76 0 -1 1;`);
+    const dlEntries = atNode(dlLoads, n => -Math.round(n.dl));
+    const seisDlEntries = atNode([...seisDlById.values()], d => -Math.round(d.dl));
+    const llEntries = atNode(llLoads, n => -Math.round(n.ll));
     const seisGroups = SEISMIC_BLCS.map((name, i) => {
       const blc = i + 1;
-      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: [...dlLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`), ...seisDlLines] };
-      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: llLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`) };
+      // Both dead-load sources summed together, per node -- see sumPerNode.
+      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: sumPerNode([...dlEntries, ...seisDlEntries]).map(loadLine) };
+      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: sumPerNode(llEntries).map(loadLine) };
       const rows = seisCaseRows.get(blc) || [];
       // VERBATIM, sign and decimal both. BraceSeismic signs F_Ev by which end
       // of the brace the node is -- positive at the lower, negative at the
       // upper -- so the negation the DL path applies must NOT happen here.
-      return { blc, name, cat: BLC_CAT_EL, grav: '0.000000', lines: rows.map(r => `${r.nodeIdx + 1} 89 ${r.fev.toFixed(6)} 76 0 -1 1;`) };
+      const summed = sumPerNode(atNode(rows, r => r.fev));
+      seismicCancelled += summed.filter(e => e.mag === 0).length;
+      return { blc, name, cat: catForSeismicBlc(blc), grav: '0.000000', lines: summed.map(loadLine) };
     });
 
     const seismicLoadCount = seisGroups.slice(2).reduce((a, g) => a + g.lines.length, 0);
@@ -2758,28 +2836,35 @@ Engineer
       '[END_BASIC_LOAD_CASES]'
     ].join('\n');
 
+    // Declared counts are taken from the EMITTED line arrays, never from the
+    // source-row arrays they were built from. RISA assigns a node load to a
+    // case by order and by the count declared here, so a count that disagrees
+    // with the lines shifts every load into the wrong case -- and summing
+    // duplicates is exactly the change that makes those two numbers differ.
+    const dlOnlyLines = sumPerNode(dlEntries).map(loadLine);
+    const llOnlyLines = sumPerNode(llEntries).map(loadLine);
     const notionalCasesSection = [
       '[BASIC_LOAD_CASES] <6>',
-      `1 "DL                              " ${dlLoads.length} 0 0 0 0 0 1 0.000000 -1.000000 0.000000 -1 1.000000 1;`,
-      `2 "LL                              " ${llLoads.length} 0 0 0 0 0 2 0.000000 0.000000 0.000000 -1 1.000000 2;`,
-      `3 "NoTR                            " ${notrNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
-      `4 "NoTL                            " ${notlNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
-      `5 "NoLR                            " ${nolrNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
-      `6 "NoLL                            " ${nollNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `1 "DL                              " ${dlOnlyLines.length} 0 0 0 0 0 1 0.000000 -1.000000 0.000000 -1 1.000000 1;`,
+      `2 "LL                              " ${llOnlyLines.length} 0 0 0 0 0 2 0.000000 0.000000 0.000000 -1 1.000000 2;`,
+      `3 "NoTR                            " ${notrLoadLines.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `4 "NoTL                            " ${notlLoadLines.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `5 "NoLR                            " ${nolrLoadLines.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
+      `6 "NoLL                            " ${nollLoadLines.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
       '[END_BASIC_LOAD_CASES]'
     ].join('\n');
 
     const loadCasesSection = useSeismic ? seismicCasesSection : notionalCasesSection;
-    const totalLoads = useSeismic
-      ? seisGroups.reduce((a, g) => a + g.lines.length, 0)
-      : dlLoads.length + llLoads.length + NN;
     const loadLines = useSeismic
       ? seisGroups.flatMap(g => g.lines)
       : [
-        ...dlLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`),
-        ...llLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`),
+        ...dlOnlyLines, ...llOnlyLines,
         ...notrLoadLines, ...notlLoadLines, ...nolrLoadLines, ...nollLoadLines
       ];
+    // Derived from the lines themselves for the same reason as the per-case
+    // counts above: the header and the body cannot disagree if only one of
+    // them is a number anyone typed.
+    const totalLoads = loadLines.length;
     const loadSection = [
       `[NODE_LOADS] <${totalLoads}>`,
       ...loadLines,
@@ -2794,6 +2879,10 @@ Engineer
       warnings.push('No joint nodes were generated — DXF may be empty or malformed');
     if (state.csv && loadNodes.length === 0)
       warnings.push(`No valid rows found in Matched Load CSV — read as ${loadLayout.coords}; check the header row names the load and coordinate columns`);
+    if (mergedLoadEntries > 0)
+      warnings.push(`${mergedLoadEntries} load entr${mergedLoadEntries === 1 ? 'y' : 'ies'} shared a node with another and were summed into it — two source rows within 1mm land on one node, and each case now carries one load per node rather than several. Total force is unchanged.`);
+    if (seismicCancelled > 0)
+      warnings.push(`${seismicCancelled} seismic load${seismicCancelled === 1 ? '' : 's'} summed to exactly 0 — equal and opposite F_Ev values on one node. Written as a zero-magnitude entry; check these are meant to cancel.`);
     if (pinPointMidMember > 0)
       warnings.push(`${pinPointMidMember} of ${pinPointCount} Pin BC points sit mid-length on an HSS member (not at a drawn joint) — this is a normal support location, added as a standalone node (Boundaries: +${pinPointMidMember}). Re-export HSS ONLY.dxf from AutoCAD with members split at these points if you want them framed into the model.`);
     if (pinPointOffGeometry > 0)
@@ -2837,7 +2926,7 @@ Engineer
       loadCombinationsSection(useSeismic ? seismicComboLines() : NOTIONAL_COMBO_LINES) +
       R3D_TAIL_FOOT;
 
-    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, seismicLoads: useSeismic ? seismicLoadCount : 0, seismicCases: useSeismic ? seisFiles.length : 0, useSeismic, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
+    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, seismicLoads: useSeismic ? seismicLoadCount : 0, seismicCases: useSeismic ? seisFiles.length : 0, useSeismic, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, mergedLoadEntries, seismicCancelled, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
   }
 
   // === CORE-END ===
