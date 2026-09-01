@@ -687,13 +687,13 @@
       cursor: not-allowed;
     }
 
-    #btn-merge-download {
+    #btn-merge-download, #btn-pinexp-download {
       background: var(--primary);
       color: #ffffff;
       display: none;
     }
-    #btn-merge-download:hover { background: var(--primary-focus); }
-    #btn-merge-download.visible { display: block; }
+    #btn-merge-download:hover, #btn-pinexp-download:hover { background: var(--primary-focus); }
+    #btn-merge-download.visible, #btn-pinexp-download.visible { display: block; }
 
     /* ── Dark mode ───────────────────────────────────────── */
     body.dark {
@@ -988,6 +988,35 @@
     </div>
   </div>
 
+  <!-- Pin BC → DXF export. Runs the OPPOSITE direction to the five panels
+       above: they feed one Generate that writes an .r3d, this reads one. Its
+       own section and its own button so Generate keeps one meaning. -->
+  <div class="merge-section" id="pinexp-section">
+    <div class="merge-header">
+      <span class="step-badge">↩</span>
+      <div>
+        <div class="merge-title">Pin BC → DXF</div>
+        <div class="merge-sub">Drop a RISA <code>.r3d</code> to extract every node with a pinned support into a DXF, on layer <code>PIN_BC</code>, for the Joist checks AutoLISP.</div>
+      </div>
+    </div>
+
+    <div class="drop-zone" id="pinexp-zone">
+      <input type="file" id="pinexp-input" accept=".r3d">
+      <div class="drop-icon">📍</div>
+      <div class="drop-label">Drop a file here or <span>browse</span></div>
+      <div class="drop-hint">Accepted: .r3d — one RISA-3D model</div>
+    </div>
+
+    <div class="preview-label">Support Summary</div>
+    <div class="preview-box" id="pinexp-preview"><span>No file loaded.</span></div>
+
+    <div class="warnings-area" id="pinexp-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
+
+    <div class="actions" style="margin-top:16px; margin-bottom:0;">
+      <button id="btn-pinexp-download">Download Pin BC DXF</button>
+    </div>
+  </div>
+
   <!-- Model summary card (shown after generation) -->
   <div class="summary-card" id="summary-card">
     <div class="summary-header">
@@ -1054,7 +1083,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 36;
+  const APP_REV = 37;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1099,7 +1128,7 @@ Engineer
 [.END_PROJECT_DESCRIPTION]
 
 [.SOLUTION_PARAMETERS] <1>
-0.005000 144.000000 6 5 1 1 3 0.120000 1 32.200000 1 24.000000 0 1 1 1 3 1 1 1 0;
+0.005000 144.000000 6 5 1 1 2 0.120000 1 32.200000 1 24.000000 0 1 1 1 3 1 1 1 0;
 [.END_SOLUTION_PARAMETERS]
 
 [.DESIGN_CODES] <1>
@@ -2662,7 +2691,23 @@ Engineer
     const nodeSection = [
       `[NODES] <${nodes.length}>`,
       ...nodes.map(n =>
-        `"${pad32(n.label)}"   ${toR3D(n.xFt)}   ${toR3D(n.yFt)}   ${Z0}   ${Z0} 917503 0 0 -1 -1 0;`
+        // Y-VERTICAL (Rev 37). The DXF's y goes in the THIRD slot, not the
+      // second: RISA-3D's default vertical axis is Y, and every RISA user on
+      // this project works Y-vertical. Up to Rev 36 this wrote (x, y, 0) with
+      // Z vertical, which imports and solves but stands the model up along the
+      // wrong axis. Read out of `raw/CAZ5-VAN-MG-00-M3-3B00-RISA model
+      // 7-8_FINAL.r3d`, where four things agree: every one of 6832 nodes has
+      // Y=0, [.SOLUTION_PARAMETERS] field 7 is 2 (this file wrote 3), the DL
+      // gravity vector is `0 -1 0` (this file wrote `0 0 -1`), and all 4175
+      // node loads carry direction code 89 (this file wrote 90). Field 7 being
+      // the vertical-axis selector is an INFERENCE from one sample -- the
+      // other three corroborate it and nothing contradicts it.
+      // This is a relabelling, not a rotation: the plan stays horizontal and
+      // gravity stays perpendicular to it, so no member's local axes change.
+      // [.MEMBERS_DESIGN_CALCMODE_PARAMETERS] was checked against the sample
+      // and is byte-identical there, so its -1.000000 is not an axis and is
+      // deliberately left alone.
+      `"${pad32(n.label)}"   ${toR3D(n.xFt)}   ${Z0}   ${toR3D(n.yFt)}   ${Z0} 917503 0 0 -1 -1 0;`
       ),
       '[END_NODES]'
     ].join('\n');
@@ -2678,10 +2723,10 @@ Engineer
     // Every load entry points at its node's canonical index. Two rows that
     // merged onto one node keep both entries — RISA sums them — so no value is
     // dropped and both persistent IDs stay traceable.
-    const notrLoadLines = notrNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
-    const notlLoadLines = notlNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
-    const nolrLoadLines = nolrNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
-    const nollLoadLines = nollNodes.map(n => `${n.nodeIdx + 1} 90 0.000000 76 0 -1 1;`);
+    const notrLoadLines = notrNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
+    const notlLoadLines = notlNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
+    const nolrLoadLines = nolrNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
+    const nollLoadLines = nollNodes.map(n => `${n.nodeIdx + 1} 89 0.000000 76 0 -1 1;`);
 
     // The seismic scheme's eleven cases. RISA assigns a node load to a case by
     // ORDER and the per-case count in this section -- the NODE_LOADS lines
@@ -2692,16 +2737,16 @@ Engineer
     // export a case by that name, every seismic combination references it, and
     // the magnitudes get entered in RISA. Same treatment the notional cases
     // already get, and the same reason.
-    const seisDlLines = [...seisDlById.values()].map(d => `${d.nodeIdx + 1} 90 ${(-Math.round(d.dl)).toFixed(6)} 76 0 -1 1;`);
+    const seisDlLines = [...seisDlById.values()].map(d => `${d.nodeIdx + 1} 89 ${(-Math.round(d.dl)).toFixed(6)} 76 0 -1 1;`);
     const seisGroups = SEISMIC_BLCS.map((name, i) => {
       const blc = i + 1;
-      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: [...dlLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`), ...seisDlLines] };
-      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: llLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`) };
+      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: [...dlLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`), ...seisDlLines] };
+      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: llLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`) };
       const rows = seisCaseRows.get(blc) || [];
       // VERBATIM, sign and decimal both. BraceSeismic signs F_Ev by which end
       // of the brace the node is -- positive at the lower, negative at the
       // upper -- so the negation the DL path applies must NOT happen here.
-      return { blc, name, cat: BLC_CAT_EL, grav: '0.000000', lines: rows.map(r => `${r.nodeIdx + 1} 90 ${r.fev.toFixed(6)} 76 0 -1 1;`) };
+      return { blc, name, cat: BLC_CAT_EL, grav: '0.000000', lines: rows.map(r => `${r.nodeIdx + 1} 89 ${r.fev.toFixed(6)} 76 0 -1 1;`) };
     });
 
     const seismicLoadCount = seisGroups.slice(2).reduce((a, g) => a + g.lines.length, 0);
@@ -2709,13 +2754,13 @@ Engineer
     const seismicCasesSection = [
       `[BASIC_LOAD_CASES] <${seisGroups.length}>`,
       ...seisGroups.map(g =>
-        `${g.blc} "${pad32(g.name)}" ${g.lines.length} 0 0 0 0 0 ${g.cat} 0.000000 0.000000 ${g.grav} -1 1.000000 ${g.cat};`),
+        `${g.blc} "${pad32(g.name)}" ${g.lines.length} 0 0 0 0 0 ${g.cat} 0.000000 ${g.grav} 0.000000 -1 1.000000 ${g.cat};`),
       '[END_BASIC_LOAD_CASES]'
     ].join('\n');
 
     const notionalCasesSection = [
       '[BASIC_LOAD_CASES] <6>',
-      `1 "DL                              " ${dlLoads.length} 0 0 0 0 0 1 0.000000 0.000000 -1.000000 -1 1.000000 1;`,
+      `1 "DL                              " ${dlLoads.length} 0 0 0 0 0 1 0.000000 -1.000000 0.000000 -1 1.000000 1;`,
       `2 "LL                              " ${llLoads.length} 0 0 0 0 0 2 0.000000 0.000000 0.000000 -1 1.000000 2;`,
       `3 "NoTR                            " ${notrNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
       `4 "NoTL                            " ${notlNodes.length} 0 0 0 0 0 59 0.000000 0.000000 0.000000 -1 1.000000 59;`,
@@ -2731,8 +2776,8 @@ Engineer
     const loadLines = useSeismic
       ? seisGroups.flatMap(g => g.lines)
       : [
-        ...dlLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`),
-        ...llLoads.map(n => `${n.nodeIdx + 1} 90 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`),
+        ...dlLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.dl)).toFixed(6)} 76 0 -1 1;`),
+        ...llLoads.map(n => `${n.nodeIdx + 1} 89 ${(-Math.round(n.ll)).toFixed(6)} 76 0 -1 1;`),
         ...notrLoadLines, ...notlLoadLines, ...nolrLoadLines, ...nollLoadLines
       ];
     const loadSection = [
@@ -2920,6 +2965,180 @@ Engineer
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'unconnected-pins.dxf';
+    a.click();
+  });
+
+  // ===========================================================================
+  // Pin BC → DXF export — read a RISA .r3d, write a point at every restrained
+  // node so the Joist checks AutoLISP can pick them up in AutoCAD.
+  // ===========================================================================
+  //
+  // Runs the opposite direction to everything above it: the five panels are
+  // inputs to one Generate that WRITES an .r3d, this READS one. Deliberately
+  // kept out of `state` and out of generate() -- Rev 34 shipped a defect where
+  // generate() threw for every caller because the harness's own state object
+  // had no `state.seis`, and that is the same entanglement.
+  //
+  // === PINEXPORT-CORE-START === (tools/pinbc-export-harness.mjs extracts
+  // between these markers to run the exporter in Node -- same trick as
+  // CORE-START/END and MERGE-CORE-START/END above.)
+
+  // A RISA node coordinate is in FEET. Established from the sample's geometry,
+  // not from its [UNITS] header: measuring every member endpoint-to-endpoint
+  // gives 344 members at exactly 8.0, 216 at 20.0, 75 at 12.0 and 17 at 2.0 --
+  // the HS - B2B 2'/8'/12'/20' layer lengths this project already knows. A 12x
+  // or 25.4x error would have read 96.0 or 304.8. Worth doing properly: a DXF
+  // off by 12x opens perfectly in AutoCAD and only fails at the contractor.
+  const FT_TO_MM = 304.8;
+
+  // RISA writes a restrained DOF as 4 and a free one as 0. Anything else in
+  // those six fields is a spring stiffness or a code this tool has not seen --
+  // such a node is REPORTED, never silently dropped and never exported.
+  function classifyBc(flags) {
+    if (!flags.every(f => f === '0' || f === '4')) return 'unknown';
+    // "All points with PIN boundary conditions" was settled with the user as
+    // every node holding all three TRANSLATIONS, whatever its rotations do: a
+    // joist check cares that the point carries load, not how it is fixed. In
+    // the sample that is 1291 -- 1239 exact pins (4 4 4 0 0 0), 49 fully fixed
+    // (4 4 4 4 4 4), 2 pin+rX and 1 pin+rZ. The one node restraining nothing
+    // is excluded.
+    return flags.slice(0, 3).every(f => f === '4') ? 'restrained' : 'free';
+  }
+
+  // Pull one bracketed section's body out of an .r3d. Sections are delimited by
+  // `[NAME] <count>` and `[END_NAME]`, both at the start of a line.
+  function r3dSection(text, name) {
+    const lines = text.split(/\r?\n/);
+    const start = lines.findIndex(l => l.startsWith('[' + name + ']'));
+    if (start === -1) return null;
+    const end = lines.findIndex((l, i) => i > start && l.startsWith('[END_' + name + ']'));
+    if (end === -1) return null;
+    // The declared count rides on the header as `<n>`; kept so the reader can
+    // be checked against the file's own claim rather than against itself.
+    const declared = /<(\d+)>/.exec(lines[start]);
+    return { rows: lines.slice(start + 1, end).map(l => l.trim()).filter(Boolean),
+             declared: declared ? Number(declared[1]) : null };
+  }
+
+  function parseR3dPins(text) {
+    const nodeSec = r3dSection(text, 'NODES');
+    if (!nodeSec) throw new Error('No [NODES] section — is this a RISA .r3d file?');
+    const bcSec = r3dSection(text, 'BOUNDARY_CONDITIONS');
+    if (!bcSec) throw new Error('No [BOUNDARY_CONDITIONS] section — this model has no supports.');
+
+    // `"B1                    "   5.285e+02   0.0   1.0539e+03   0.0 65535 ...`
+    // The label is quoted and padded with spaces, so it has to come off before
+    // the numbers can be split on whitespace.
+    const nodes = nodeSec.rows.map(l => {
+      const label = (/^"([^"]*)"/.exec(l) || [, ''])[1].trim();
+      const p = l.replace(/^"[^"]*"/, '').trim().split(/\s+/);
+      return { label, x: parseFloat(p[0]), y: parseFloat(p[1]), z: parseFloat(p[2]) };
+    });
+
+    const warnings = [];
+    if (nodeSec.declared !== null && nodeSec.declared !== nodes.length)
+      warnings.push(`[NODES] declares ${nodeSec.declared} rows but ${nodes.length} were read`);
+    if (bcSec.declared !== null && bcSec.declared !== bcSec.rows.length)
+      warnings.push(`[BOUNDARY_CONDITIONS] declares ${bcSec.declared} rows but ${bcSec.rows.length} were read`);
+
+    // Field 1 is a 1-BASED INDEX INTO [NODES], not a label. Verified against
+    // the sample: 1292 BC rows, highest index 6832 = exactly the node count,
+    // and member endpoint indices read back as clean whole-foot lengths. An
+    // off-by-one here would move every point onto its neighbour ~6.25 ft away
+    // -- plausible-looking and wrong, so it is checked rather than assumed.
+    const pins = [];
+    const counts = { restrained: 0, free: 0, unknown: 0 };
+    const unknownRows = [];
+    let badIndex = 0;
+    for (const row of bcSec.rows) {
+      const p = row.replace(/;$/, '').trim().split(/\s+/);
+      const idx = Number(p[0]);
+      if (!Number.isInteger(idx) || idx < 1 || idx > nodes.length) { badIndex++; continue; }
+      const kind = classifyBc(p.slice(1, 7));
+      counts[kind]++;
+      if (kind === 'unknown') { if (unknownRows.length < 10) unknownRows.push(row); continue; }
+      if (kind === 'restrained') pins.push(nodes[idx - 1]);
+    }
+    if (badIndex)
+      warnings.push(`${badIndex} boundary row(s) point outside [NODES] (1..${nodes.length}) and were skipped`);
+    if (counts.unknown)
+      warnings.push(`${counts.unknown} boundary row(s) carry a DOF value that is neither 0 nor 4 — `
+        + `likely spring stiffnesses. NOT exported. First: ${unknownRows[0]}`);
+
+    // The plan is taken as X-Z with Y vertical, always -- no auto-detect. From
+    // Rev 37 this tool's own output is Y-vertical too, so there is no plane to
+    // infer. What stops a genuinely 3D model or a pre-Rev-37 file being
+    // silently flattened is this warning, not a silent branch.
+    const offPlane = pins.filter(n => Math.abs(n.y) > 1e-9);
+    if (offPlane.length)
+      warnings.push(`${offPlane.length} of ${pins.length} exported point(s) have a non-zero Y `
+        + `(range ${Math.min(...offPlane.map(n => n.y)).toFixed(3)} to `
+        + `${Math.max(...offPlane.map(n => n.y)).toFixed(3)} ft). This model is NOT flat in Y — `
+        + `the DXF takes X and Z and the Y is discarded. Check the vertical axis before using it.`);
+
+    return { nodes, pins, counts, warnings, totalBc: bcSec.rows.length };
+  }
+
+  // Bare POINT entities on one layer, no HEADER and no TABLES -- the same
+  // minimal shape as buildUnconnectedPinsDxf above, which already opens in
+  // this user's AutoCAD. No TEXT, no XDATA: labels are placed by the AutoLISP.
+  function buildPinBcDxf(pins) {
+    const entities = pins.map(n =>
+      `0\nPOINT\n8\nPIN_BC\n10\n${n.x * FT_TO_MM}\n20\n${n.z * FT_TO_MM}\n30\n0.0`);
+    return `0\nSECTION\n2\nENTITIES\n${entities.join('\n')}\n0\nENDSEC\n0\nEOF\n`;
+  }
+
+  // === PINEXPORT-CORE-END ===
+
+  // --- UI wiring -------------------------------------------------------------
+  const pinState = { name: '', result: null };
+  const pinZone = document.getElementById('pinexp-zone');
+  const pinInput = document.getElementById('pinexp-input');
+  const pinPreview = document.getElementById('pinexp-preview');
+  const pinWarnings = document.getElementById('pinexp-warnings');
+  const pinDownload = document.getElementById('btn-pinexp-download');
+
+  pinZone.addEventListener('dragover', e => { e.preventDefault(); pinZone.classList.add('dragover'); });
+  pinZone.addEventListener('dragleave', () => pinZone.classList.remove('dragover'));
+  pinZone.addEventListener('drop', e => { e.preventDefault(); pinZone.classList.remove('dragover'); loadPinFile(e.dataTransfer.files[0]); });
+  // Cleared after the read, not before -- the same live-FileList trap the merge
+  // panel documents above.
+  pinInput.addEventListener('change', async e => { await loadPinFile(e.target.files[0]); pinInput.value = ''; });
+
+  async function loadPinFile(file) {
+    if (!file) return;
+    pinState.name = file.name;
+    pinState.result = null;
+    pinDownload.classList.remove('visible');
+    pinWarnings.style.display = 'none';
+    pinPreview.innerHTML = '<span>Reading…</span>';
+    try {
+      pinState.result = parseR3dPins(await file.text());
+    } catch (err) {
+      pinPreview.innerHTML = `<span>✕ ${xmlEsc(err.message)}</span>`;
+      return;
+    }
+    const r = pinState.result;
+    pinPreview.innerHTML =
+      `<div><strong>${xmlEsc(file.name)}</strong></div>`
+      + `<div>${r.nodes.length} nodes, ${r.totalBc} boundary conditions</div>`
+      + `<div><strong>${r.pins.length}</strong> restrained points to export `
+      + `(${r.counts.free} restrain no translation, ${r.counts.unknown} unrecognised)</div>`;
+    if (r.warnings.length) {
+      pinWarnings.innerHTML = r.warnings.map(w => `<div>⚠ ${xmlEsc(w)}</div>`).join('');
+      pinWarnings.style.display = 'block';
+    }
+    if (r.pins.length) pinDownload.classList.add('visible');
+  }
+
+  pinDownload.addEventListener('click', () => {
+    if (!pinState.result || !pinState.result.pins.length) return;
+    const blob = new Blob([buildPinBcDxf(pinState.result.pins)], { type: 'application/dxf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    // Named after the .r3d it came from, so two exports cannot be confused in
+    // a downloads folder.
+    a.download = pinState.name.replace(/\.r3d$/i, '') + '-pins.dxf';
     a.click();
   });
 
