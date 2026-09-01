@@ -1101,7 +1101,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 41;
+  const APP_REV = 42;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -3302,7 +3302,25 @@ Engineer
   // this user's AutoCAD. No TEXT, no XDATA: labels are placed by the AutoLISP.
   function buildPinBcDxf(pins) {
     const entities = pins.map(n =>
-      `0\nPOINT\n8\nPIN_BC\n10\n${n.x * FT_TO_MM}\n20\n${n.z * FT_TO_MM}\n30\n0.0`);
+      // TRANSPOSED (Rev 42): DXF x is RISA **Z**, DXF y is RISA **X**.
+      //
+      // Rev 37 wrote x=X, y=Z, reasoning that a model this tool generates maps
+      // the source drawing's x to RISA X and its y to RISA Z, so that ordering
+      // round-trips the pins back to the drawing they were drawn in. Opened in
+      // AutoCAD against a real model it came out 90 degrees off RISA's own
+      // view, which is the orientation the joist check is read against.
+      //
+      // Established by shape, not by argument: the sample's 1291 pins were
+      // rendered both ways and matched against a screenshot of RISA's view.
+      // Its two small outlying clusters act as a fingerprint -- a cluster at
+      // ~84% down, LEFT of centre, and a wide strip at the very bottom. Only
+      // this mapping puts them where RISA shows them; the mirrored variant
+      // puts that cluster right of centre.
+      //
+      // One rule for every file, on the user's instruction, taken after the
+      // round-trip argument above was put to them. So an .r3d that this tool
+      // generated also exports transposed relative to its own source drawing.
+      `0\nPOINT\n8\nPIN_BC\n10\n${n.z * FT_TO_MM}\n20\n${n.x * FT_TO_MM}\n30\n0.0`);
     return `0\nSECTION\n2\nENTITIES\n${entities.join('\n')}\n0\nENDSEC\n0\nEOF\n`;
   }
 
