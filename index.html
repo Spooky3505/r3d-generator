@@ -1101,7 +1101,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 44;
+  const APP_REV = 45;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -3351,6 +3351,30 @@ Engineer
   // Bare POINT entities on one layer, no HEADER and no TABLES -- the same
   // minimal shape as buildUnconnectedPinsDxf above, which already opens in
   // this user's AutoCAD. No TEXT, no XDATA: labels are placed by the AutoLISP.
+  // The RISA node label rides on each POINT as XDATA under this application
+  // name. Chosen over a visible TEXT entity because the pins get as close as
+  // 0.25 ft apart, where text at any readable height overlaps into soup -- and
+  // because a window select then returns one entity per pin already carrying
+  // its own label, with no second entity type for the AutoLISP to filter out.
+  //
+  //   (setq ss (ssget "_W" p1 p2 '((0 . "POINT"))))
+  //   (setq xd (assoc -3 (entget (ssname ss 0) '("RISA_PIN"))))
+  //   (setq lbl (cdr (nth 1 (cdr (cadr xd)))))     ; => "B244"
+  const PIN_XDATA_APP = 'RISA_PIN';
+
+  // AutoCAD DISCARDS xdata whose application name is not registered in the
+  // APPID table, and does it silently -- the file opens, every point is there,
+  // and the labels are simply gone. So the DXF, entities-only up to Rev 44,
+  // now carries a minimal TABLES section for exactly this one APPID. Nothing
+  // else is added: no HEADER, no layer table, no linetypes.
+  function appIdTable() {
+    return ['0', 'SECTION', '2', 'TABLES',
+            '0', 'TABLE', '2', 'APPID', '70', '1',
+            '0', 'APPID', '2', PIN_XDATA_APP, '70', '0',
+            '0', 'ENDTAB',
+            '0', 'ENDSEC'].join('\n');
+  }
+
   function buildPinBcDxf(pins) {
     const entities = pins.map(n =>
       // TRANSPOSED (Rev 42): DXF x is RISA **Z**, DXF y is RISA **X**.
@@ -3371,8 +3395,11 @@ Engineer
       // One rule for every file, on the user's instruction, taken after the
       // round-trip argument above was put to them. So an .r3d that this tool
       // generated also exports transposed relative to its own source drawing.
-      `0\nPOINT\n8\nPIN_BC\n10\n${n.z * FT_TO_MM}\n20\n${n.x * FT_TO_MM}\n30\n0.0`);
-    return `0\nSECTION\n2\nENTITIES\n${entities.join('\n')}\n0\nENDSEC\n0\nEOF\n`;
+      //
+      // Group 1001 names the application, 1000 carries the string.
+      `0\nPOINT\n8\nPIN_BC\n10\n${n.z * FT_TO_MM}\n20\n${n.x * FT_TO_MM}\n30\n0.0`
+      + `\n1001\n${PIN_XDATA_APP}\n1000\n${n.label || ''}`);
+    return `${appIdTable()}\n0\nSECTION\n2\nENTITIES\n${entities.join('\n')}\n0\nENDSEC\n0\nEOF\n`;
   }
 
   // === PINEXPORT-CORE-END ===
