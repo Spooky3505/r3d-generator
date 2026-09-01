@@ -1101,7 +1101,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 42;
+  const APP_REV = 43;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2774,8 +2774,29 @@ Engineer
     const nodeSection = [
       `[NODES] <${nodes.length}>`,
       ...nodes.map(n =>
-        // Y-VERTICAL (Rev 37). The DXF's y goes in the THIRD slot, not the
-      // second: RISA-3D's default vertical axis is Y, and every RISA user on
+        // AXES SWAPPED (Rev 43): RISA X is the drawing's **y**, RISA Z is the
+      // drawing's **x**. Up to Rev 42 it was the other way round, and RISA drew
+      // the model transposed against the AutoCAD drawing it came from -- a
+      // drawing 220 ft wide by 590 ft tall came out 590 wide by 220 tall.
+      //
+      // RISA's plan view is up = X, right = Z. AutoCAD's is up = y, right = x.
+      // So the two look identical only when Z = drawing x and X = drawing y.
+      // Confirmed against a real model: the aspect ratio had inverted (0.37 in
+      // AutoCAD, 2.71 in RISA, and 1/0.37 = 2.68), and the drawing's topmost
+      // cluster -- upper RIGHT in AutoCAD -- appeared at the far RIGHT in
+      // RISA, which is where a pure swap puts it and not where a mirror would.
+      //
+      // This also makes the Pin BC exporter a true round-trip: it writes DXF
+      // x = RISA Z and y = RISA X (Rev 42), which is now drawing x and
+      // drawing y again. Rev 42 fixed the symptom at the export end; this is
+      // the same defect at its source.
+      //
+      // Only the emitted line changes. Nodes are still interned, matched and
+      // deduplicated in DRAWING coordinates (xFt, yFt), so pin matching, load
+      // matching and every node index are untouched.
+      //
+      // Y-VERTICAL (Rev 37). The vertical axis is the SECOND slot, held at 0:
+      // RISA-3D's default vertical axis is Y, and every RISA user on
       // this project works Y-vertical. Up to Rev 36 this wrote (x, y, 0) with
       // Z vertical, which imports and solves but stands the model up along the
       // wrong axis. Read out of `raw/CAZ5-VAN-MG-00-M3-3B00-RISA model
@@ -2790,7 +2811,7 @@ Engineer
       // [.MEMBERS_DESIGN_CALCMODE_PARAMETERS] was checked against the sample
       // and is byte-identical there, so its -1.000000 is not an axis and is
       // deliberately left alone.
-      `"${pad32(n.label)}"   ${toR3D(n.xFt)}   ${Z0}   ${toR3D(n.yFt)}   ${Z0} 917503 0 0 -1 -1 0;`
+      `"${pad32(n.label)}"   ${toR3D(n.yFt)}   ${Z0}   ${toR3D(n.xFt)}   ${Z0} 917503 0 0 -1 -1 0;`
       ),
       '[END_NODES]'
     ].join('\n');
