@@ -1101,7 +1101,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 40;
+  const APP_REV = 41;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -2827,27 +2827,32 @@ Engineer
     // node present in both got two DL entries. Summing has to happen ACROSS
     // both sources, not within each, which is why the entry lists are
     // concatenated before being summed rather than after.
-    let mergedLoadEntries = 0;
     let seismicCancelled = 0;
-    function sumPerNode(entries) {
+    // Returns the count alongside the list rather than incrementing a shared
+    // total. Rev 38 did the latter and over-reported: several of these lists
+    // are built for BOTH output paths but only one path is ever emitted, and
+    // `llEntries` in particular was collapsed twice, so a single duplicated
+    // point carrying a dead and a live load was reported as 4 merges instead
+    // of 2. The caller now adds up only the lists it actually writes.
+    function collapse(entries) {
       // Insertion order = first appearance, so the emitted order matches what
       // the old code produced for every node that was never duplicated.
       const byNode = new Map();
+      let merged = 0;
       for (const e of entries) {
-        if (byNode.has(e.nodeIdx)) { byNode.set(e.nodeIdx, byNode.get(e.nodeIdx) + e.mag); mergedLoadEntries++; }
+        if (byNode.has(e.nodeIdx)) { byNode.set(e.nodeIdx, byNode.get(e.nodeIdx) + e.mag); merged++; }
         else byNode.set(e.nodeIdx, e.mag);
       }
-      return [...byNode].map(([nodeIdx, mag]) => ({ nodeIdx, mag }));
+      return { list: [...byNode].map(([nodeIdx, mag]) => ({ nodeIdx, mag })), merged };
     }
     const loadLine = e => `${e.nodeIdx + 1} 89 ${e.mag.toFixed(6)} 76 0 -1 1;`;
     const atNode = (list, mag) => list.map(n => ({ nodeIdx: n.nodeIdx, mag: mag(n) }));
 
     // Notional loads are written at 0 for editing in RISA, so there is no
     // magnitude to add -- but two rows on one node still produced two lines.
-    const notrLoadLines = sumPerNode(atNode(notrNodes, () => 0)).map(loadLine);
-    const notlLoadLines = sumPerNode(atNode(notlNodes, () => 0)).map(loadLine);
-    const nolrLoadLines = sumPerNode(atNode(nolrNodes, () => 0)).map(loadLine);
-    const nollLoadLines = sumPerNode(atNode(nollNodes, () => 0)).map(loadLine);
+    const notional = [notrNodes, notlNodes, nolrNodes, nollNodes].map(ns => collapse(atNode(ns, () => 0)));
+    const [notrLoadLines, notlLoadLines, nolrLoadLines, nollLoadLines] =
+      notional.map(c => c.list.map(loadLine));
 
     // The seismic scheme's eleven cases. RISA assigns a node load to a case by
     // ORDER and the per-case count in this section -- the NODE_LOADS lines
@@ -2869,7 +2874,13 @@ Engineer
     const llEntries = atNode(llLoads, n => -Math.round(n.ll));
     // Computed once: BLC 1 emits it and BLC 3 scales it, so the two cases
     // cannot drift apart in node set or order.
-    const dlSummed = sumPerNode([...dlEntries, ...seisDlEntries]);
+    // Each of these is collapsed exactly ONCE. Which of them is emitted depends
+    // on the path, and only the emitted ones contribute to the merge count.
+    const dlAll = collapse([...dlEntries, ...seisDlEntries]);   // seismic path, BLC 1
+    const dlCsvOnly = collapse(dlEntries);                      // notional path, DL
+    const llAll = collapse(llEntries);                          // both paths, LL
+    const dlSummed = dlAll.list;
+    let seismicCaseMerges = 0;
     const seisGroups = SEISMIC_BLCS.map((name, i) => {
       const blc = i + 1;
       // Both dead-load sources summed together, per node -- see sumPerNode.
@@ -2903,14 +2914,15 @@ Engineer
           nodeIdx: e.nodeIdx,
           mag: Math.sign(e.mag) * Math.round(Math.abs(e.mag) * evFactor)
         })) : [] };
-      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: sumPerNode(llEntries).map(loadLine) };
+      if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: llAll.list.map(loadLine) };
       const rows = seisCaseRows.get(blc) || [];
       // VERBATIM, sign and decimal both. BraceSeismic signs F_Ev by which end
       // of the brace the node is -- positive at the lower, negative at the
       // upper -- so the negation the DL path applies must NOT happen here.
-      const summed = sumPerNode(atNode(rows, r => r.fev));
-      seismicCancelled += summed.filter(e => e.mag === 0).length;
-      return { blc, name, cat: catForSeismicBlc(blc), grav: '0.000000', lines: summed.map(loadLine) };
+      const c = collapse(atNode(rows, r => r.fev));
+      seismicCaseMerges += c.merged;
+      seismicCancelled += c.list.filter(e => e.mag === 0).length;
+      return { blc, name, cat: catForSeismicBlc(blc), grav: '0.000000', lines: c.list.map(loadLine) };
     });
 
     const seismicLoadCount = seisGroups.slice(2).reduce((a, g) => a + g.lines.length, 0);
@@ -2927,8 +2939,8 @@ Engineer
     // case by order and by the count declared here, so a count that disagrees
     // with the lines shifts every load into the wrong case -- and summing
     // duplicates is exactly the change that makes those two numbers differ.
-    const dlOnlyLines = sumPerNode(dlEntries).map(loadLine);
-    const llOnlyLines = sumPerNode(llEntries).map(loadLine);
+    const dlOnlyLines = dlCsvOnly.list.map(loadLine);
+    const llOnlyLines = llAll.list.map(loadLine);
     const notionalCasesSection = [
       '[BASIC_LOAD_CASES] <6>',
       `1 "DL                              " ${dlOnlyLines.length} 0 0 0 0 0 1 0.000000 -1.000000 0.000000 -1 1.000000 1;`,
@@ -2951,6 +2963,23 @@ Engineer
     // counts above: the header and the body cannot disagree if only one of
     // them is a number anyone typed.
     const totalLoads = loadLines.length;
+
+    // Only the lists this path actually emitted. See collapse() above for why
+    // this is added up here rather than accumulated inside it.
+    const mergedLoadEntries = useSeismic
+      ? dlAll.merged + llAll.merged + seismicCaseMerges
+      : dlCsvOnly.merged + llAll.merged + notional.reduce((a, c) => a + c.merged, 0);
+
+    // DL / LL / Ev must hold the same number of entries -- the user's rule,
+    // from RISA's Basic Load Cases grid. They come apart for reasons that are
+    // each individually legitimate, which is why this reports rather than
+    // blocks, and why it names the cause instead of just the numbers.
+    const caseCounts = useSeismic
+      ? { DL: seisGroups[0].lines.length, LL: seisGroups[1].lines.length, Ev: seisGroups[2].lines.length }
+      : { DL: dlOnlyLines.length, LL: llOnlyLines.length };
+    const dlNoLl = loadNodes.filter(n => Math.round(n.dl) !== 0 && Math.round(n.ll) === 0).length;
+    const llNoDl = loadNodes.filter(n => Math.round(n.ll) !== 0 && Math.round(n.dl) === 0).length;
+    const seisDlNodes = useSeismic ? [...seisDlById.values()].filter(d => Math.round(d.dl) !== 0).length : 0;
     const loadSection = [
       `[NODE_LOADS] <${totalLoads}>`,
       ...loadLines,
@@ -2965,6 +2994,20 @@ Engineer
       warnings.push('No joint nodes were generated — DXF may be empty or malformed');
     if (state.csv && loadNodes.length === 0)
       warnings.push(`No valid rows found in Matched Load CSV — read as ${loadLayout.coords}; check the header row names the load and coordinate columns`);
+    if (new Set(Object.values(caseCounts)).size > 1) {
+      const causes = [];
+      const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+      if (dlNoLl) causes.push(`${plural(dlNoLl, 'row has', 'rows have')} a dead load but no live load`);
+      if (llNoDl) causes.push(`${plural(llNoDl, 'row has', 'rows have')} a live load but no dead load`);
+      if (seisDlNodes) causes.push(`the seismic sheets add ${plural(seisDlNodes, 'dead-load node that carries', 'dead-load nodes that carry')} no live load`);
+      if (mergedLoadEntries) causes.push(`${plural(mergedLoadEntries, 'entry was', 'entries were')} summed onto a shared node`);
+      warnings.push(
+        `Load case counts do not match: ${Object.entries(caseCounts).map(([k, v]) => `${k} ${v}`).join(', ')}. `
+        + (causes.length
+          ? `${causes.join('; ')}. A zero magnitude writes no entry, so a row missing one of the two loads appears in only one case.`
+          : 'Cause not identified from the input — worth checking the source rows.')
+        + ' Check the source data if they are meant to be equal.');
+    }
     if (mergedLoadEntries > 0)
       warnings.push(`${mergedLoadEntries} load entr${mergedLoadEntries === 1 ? 'y' : 'ies'} shared a node with another and were summed into it — two source rows within 1mm land on one node, and each case now carries one load per node rather than several. Total force is unchanged.`);
     if (seismicCancelled > 0)
@@ -3012,7 +3055,7 @@ Engineer
       loadCombinationsSection(useSeismic ? seismicComboLines() : NOTIONAL_COMBO_LINES) +
       R3D_TAIL_FOOT;
 
-    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, seismicLoads: useSeismic ? seismicLoadCount : 0, seismicCases: useSeismic ? seisFiles.length : 0, useSeismic, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, mergedLoadEntries, seismicCancelled, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
+    return { text: output, joints: NJ, members: members.length, loadNodes: NL, bcOnlyNodes: NBC, bcs: connectedBcIndices.length, loads: totalLoads, notionalNodes: NN, seismicLoads: useSeismic ? seismicLoadCount : 0, seismicCases: useSeismic ? seisFiles.length : 0, useSeismic, warnings, unconnectedPins: offGeometryPins, pinPointCount, pinPointDuplicates, zeroDlRows, zeroLlRows, totalNodes: nodes.length, nodesMerged, jointNoiseMerged, mergedLoadEntries, seismicCancelled, caseCounts, badLoadRows, unknownNotionalRows: [...unknownNotionalLayers.values()].reduce((a, b) => a + b, 0) };
   }
 
   // === CORE-END ===
