@@ -687,6 +687,19 @@
       cursor: not-allowed;
     }
 
+    .ev-row {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: wrap; margin: 12px 0 4px;
+    }
+    .ev-row label { font-weight: 600; font-size: 12px; }
+    .ev-row input {
+      width: 90px; padding: 5px 7px; font: inherit; font-size: 12px;
+      border: 1px solid var(--line); border-radius: 6px;
+      background: var(--surface); color: var(--ink);
+    }
+    .ev-hint { font-size: 11px; color: var(--ink-muted-48); flex: 1 1 200px; }
+    body.dark .ev-row input { background: #1b1b1b; color: #fff; border-color: #3a3a3a; }
+
     #btn-merge-download, #btn-pinexp-download {
       background: var(--primary);
       color: #ffffff;
@@ -951,6 +964,11 @@
           <div class="drop-hint">Accepted: .csv — several at once, each named for its load case</div>
         </div>
         <div class="merge-filelist" id="seis-filelist"></div>
+        <div class="ev-row">
+          <label for="ev-factor">Ev factor</label>
+          <input type="number" id="ev-factor" value="0.216" step="0.001" min="0" inputmode="decimal">
+          <span class="ev-hint">Ev = dead load &times; this, rounded to whole pounds. Blank or 0 leaves the Ev case empty.</span>
+        </div>
         <div class="preview-label">Load Case Summary</div>
         <div class="preview-box" id="seis-preview"><span>No files loaded.</span></div>
       </div>
@@ -1083,7 +1101,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 39;
+  const APP_REV = 40;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1852,7 +1870,34 @@ Engineer
   // state.seis is a LIST, unlike every other panel: the seismic scheme needs
   // one file per load case and there are eight of them. Entries are
   // { name, blc, caseName, text, rows, error }.
-  const state = { dxf: null, pinDxf: null, csv: null, nosCsv: null, seis: [], output: null, unconnectedPins: null };
+  const state = { dxf: null, pinDxf: null, csv: null, nosCsv: null, seis: [], evFactor: null, output: null, unconnectedPins: null };
+
+  // The 0.216 default lives in the markup and is copied into state here, NOT
+  // defaulted inside generate(). A harness injects its own state object, so a
+  // default buried in generate() would make every harness run silently use a
+  // factor no test asked for -- and would flip the long-standing "BLC 3 is
+  // empty" behaviour for callers that never set the field.
+  (() => {
+    const box = document.getElementById('ev-factor');
+    // `box.value` is guarded because this same core is loaded headlessly by the
+    // harnesses, whose document stub has no value property. A missing or empty
+    // field means no factor, which is the pre-Rev-40 behaviour.
+    // Only ever writes when the field really exists. The harnesses load this
+    // same core headlessly against a document stub and inject their own state;
+    // an unconditional write here ran at load and clobbered the injected
+    // evFactor with null, so every Ev test saw an empty case no matter what it
+    // asked for. The guard is the fix, not the stub.
+    const read = () => {
+      if (!box || typeof box.value !== 'string') return;
+      const v = box.value.trim();
+      state.evFactor = v === '' ? null : Number(v);
+    };
+    read();
+    if (box && box.addEventListener) {
+      box.addEventListener('input', read);
+      box.addEventListener('change', read);
+    }
+  })();
 
   // ---------------------------------------------------------------------------
   // Drag-over styling
@@ -2809,17 +2854,55 @@ Engineer
     // themselves carry no case number -- so the two lists below are built from
     // one array and cannot fall out of step.
     //
-    // BLC 3 (Ev) is written with zero entries on purpose: BRCSEISOUT cannot
-    // export a case by that name, every seismic combination references it, and
-    // the magnitudes get entered in RISA. Same treatment the notional cases
-    // already get, and the same reason.
+    // BLC 3 (Ev) is filled from the dead load times the Ev factor (Rev 40).
+    // BRCSEISOUT cannot export a case by that name and every seismic
+    // combination references it, so up to Rev 39 it was written empty and the
+    // magnitudes were typed into RISA by hand. With no factor given that is
+    // still exactly what happens -- see the blc === 3 branch below.
+    // A blank, zero or unreadable factor leaves BLC 3 empty -- exactly what the
+    // tool did before Rev 40, so the existing workflow of typing the Ev
+    // magnitudes into RISA by hand still works.
+    const evFactorRaw = Number(state.evFactor);
+    const evFactor = Number.isFinite(evFactorRaw) ? evFactorRaw : 0;
     const dlEntries = atNode(dlLoads, n => -Math.round(n.dl));
     const seisDlEntries = atNode([...seisDlById.values()], d => -Math.round(d.dl));
     const llEntries = atNode(llLoads, n => -Math.round(n.ll));
+    // Computed once: BLC 1 emits it and BLC 3 scales it, so the two cases
+    // cannot drift apart in node set or order.
+    const dlSummed = sumPerNode([...dlEntries, ...seisDlEntries]);
     const seisGroups = SEISMIC_BLCS.map((name, i) => {
       const blc = i + 1;
       // Both dead-load sources summed together, per node -- see sumPerNode.
-      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: sumPerNode([...dlEntries, ...seisDlEntries]).map(loadLine) };
+      if (blc === 1) return { blc, name, cat: BLC_CAT_DL, grav: '-1.000000', lines: dlSummed.map(loadLine) };
+      // BLC 3 (Ev) is the dead load scaled by the Ev factor from panel 05.
+      //
+      // Read out of `raw/CAZ5-VAN-MG-00-M3-3B00-RISA model 7-8_FINAL.r3d`: its
+      // Ev case has the SAME 1174 nodes in the SAME order as DL, the same sign
+      // (Ev acts with gravity; the combinations apply the +/-0.7), the same
+      // direction code, and each magnitude is the DL magnitude times 0.216
+      // ROUNDED TO WHOLE POUNDS -- 0 mismatches across all 1174 loads.
+      //
+      // The rounding is what makes the factor recoverable at all: the raw
+      // per-node ratios scatter over 40 distinct values from 0.2111 to 0.2190,
+      // and the ratio of the totals (0.21607) misses 19 rows. Only 0.216 with
+      // the rounding applied fits every one.
+      //
+      // Scaled from the SUMMED DL magnitude, so a node fed by both the Matched
+      // Load CSV and a seismic sheet's Dead load column is scaled once, off its
+      // total -- which is what makes Ev's node set match DL's exactly.
+      //
+      // Tie-break on an exact .5: the magnitude is rounded POSITIVE and the
+      // sign reapplied, matching how every other magnitude in this file is
+      // produced (`-Math.round(n.dl)`). Rounding the negative product directly
+      // would disagree -- Math.round(-132.5) is -132 while -Math.round(132.5)
+      // is -133, because JS rounds halves toward +Infinity rather than away
+      // from zero. The sample has no exact .5 case, so this is chosen for
+      // consistency with the DL path rather than confirmed against it.
+      if (blc === 3) return { blc, name, cat: catForSeismicBlc(blc), grav: '0.000000',
+        lines: evFactor ? dlSummed.map(e => loadLine({
+          nodeIdx: e.nodeIdx,
+          mag: Math.sign(e.mag) * Math.round(Math.abs(e.mag) * evFactor)
+        })) : [] };
       if (blc === 2) return { blc, name, cat: BLC_CAT_LL, grav: '0.000000', lines: sumPerNode(llEntries).map(loadLine) };
       const rows = seisCaseRows.get(blc) || [];
       // VERBATIM, sign and decimal both. BraceSeismic signs F_Ev by which end
