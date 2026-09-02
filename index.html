@@ -700,6 +700,12 @@
     .ev-hint { font-size: 11px; color: var(--ink-muted-48); flex: 1 1 200px; }
     body.dark .ev-row input { background: #1b1b1b; color: #fff; border-color: #3a3a3a; }
 
+    .preview-src {
+      font-weight: 400; font-size: 10px; color: var(--ink-muted-48);
+      margin-left: 6px; text-transform: none; letter-spacing: 0;
+    }
+    .panel-wide { grid-column: 1 / -1; }
+
     #btn-merge-download, #btn-pinexp-download {
       background: var(--primary);
       color: #ffffff;
@@ -858,71 +864,32 @@
 
   <div class="panels">
 
-    <!-- Panel 1: HSS DXF -->
-    <div class="panel" data-type="dxf">
+    <!-- Panel 1: geometry, pin BC and loads in one zone.
+         Rev 46 folded the three separate panels together. Each dropped file is
+         routed by CONTENT, not by which zone it landed on, into the same three
+         state slots the three panels used -- generate() is untouched and never
+         learns that the UI changed. -->
+    <div class="panel panel-wide" data-type="model">
       <div class="panel-header">
         <span class="step-badge">01</span>
-        <span class="panel-title">DXF File — Geometry</span>
+        <span class="panel-title">Model Files — Geometry, Pin BC &amp; Loads</span>
       </div>
       <div class="panel-body">
-        <div class="drop-zone" id="dxf-zone">
-          <input type="file" id="dxf-input" accept=".dxf">
+        <div class="drop-zone" id="model-zone">
+          <input type="file" id="model-input" accept=".dxf,.csv" multiple>
           <div class="drop-icon">📐</div>
-          <div class="drop-label">Drop file here or <span>browse</span></div>
-          <div class="drop-hint">Accepted: .dxf</div>
+          <div class="drop-label">Drop files here or <span>browse</span></div>
+          <div class="drop-hint">Accepted: .dxf and .csv — any of them, several at once</div>
         </div>
-        <div class="file-status" id="dxf-status">
-          <div class="checkmark">✔</div>
-          <span id="dxf-filename"></span>
-          <button class="btn-clear" id="dxf-clear">Clear</button>
-        </div>
-        <div class="preview-label">Member Summary</div>
+        <div class="merge-filelist" id="model-filelist"></div>
+
+        <div class="preview-label">Member Summary <span class="preview-src">geometry .dxf</span></div>
         <div class="preview-box" id="dxf-preview"><span>No file loaded.</span></div>
-      </div>
-    </div>
 
-    <!-- Panel 2: Pin BC DXF -->
-    <div class="panel" data-type="pinbc">
-      <div class="panel-header">
-        <span class="step-badge">02</span>
-        <span class="panel-title">Pin BC DXF — Boundary Conditions</span>
-      </div>
-      <div class="panel-body">
-        <div class="drop-zone" id="pinbc-zone">
-          <input type="file" id="pinbc-input" accept=".dxf">
-          <div class="drop-icon">📍</div>
-          <div class="drop-label">Drop file here or <span>browse</span></div>
-          <div class="drop-hint">Accepted: .dxf</div>
-        </div>
-        <div class="file-status" id="pinbc-status">
-          <div class="checkmark">✔</div>
-          <span id="pinbc-filename"></span>
-          <button class="btn-clear" id="pinbc-clear">Clear</button>
-        </div>
-        <div class="preview-label">Node Count</div>
+        <div class="preview-label">Node Count <span class="preview-src">Pin BC .dxf</span></div>
         <div class="preview-box" id="pinbc-preview"><span>No file loaded.</span></div>
-      </div>
-    </div>
 
-    <!-- Panel 3: Matched Load CSV -->
-    <div class="panel" data-type="csv">
-      <div class="panel-header">
-        <span class="step-badge">03</span>
-        <span class="panel-title">Matched Load CSV</span>
-      </div>
-      <div class="panel-body">
-        <div class="drop-zone" id="csv-zone">
-          <input type="file" id="csv-input" accept=".csv">
-          <div class="drop-icon">📊</div>
-          <div class="drop-label">Drop file here or <span>browse</span></div>
-          <div class="drop-hint">Accepted: .csv</div>
-        </div>
-        <div class="file-status" id="csv-status">
-          <div class="checkmark">✔</div>
-          <span id="csv-filename"></span>
-          <button class="btn-clear" id="csv-clear">Clear</button>
-        </div>
-        <div class="preview-label">Load Summary</div>
+        <div class="preview-label">Load Summary <span class="preview-src">Matched Load .csv</span></div>
         <div class="preview-box" id="csv-preview"><span>No file loaded.</span></div>
       </div>
     </div>
@@ -930,7 +897,7 @@
     <!-- Panel 4: Notional Loads CSV -->
     <div class="panel" data-type="nos">
       <div class="panel-header">
-        <span class="step-badge">04</span>
+        <span class="step-badge">02</span>
         <span class="panel-title">Notional Loads — all NOs.csv</span>
       </div>
       <div class="panel-body">
@@ -953,7 +920,7 @@
     <!-- Panel 5: Seismic Load Cases — BRCSEISOUT exports, one per load case -->
     <div class="panel" data-type="seis">
       <div class="panel-header">
-        <span class="step-badge">05</span>
+        <span class="step-badge">03</span>
         <span class="panel-title">Seismic Load Cases — BRCSEISOUT exports</span>
       </div>
       <div class="panel-body">
@@ -1101,7 +1068,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 45;
+  const APP_REV = 46;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -1902,7 +1869,7 @@ Engineer
   // ---------------------------------------------------------------------------
   // Drag-over styling
   // ---------------------------------------------------------------------------
-  [['dxf-zone', 'dxf'], ['pinbc-zone', 'pinDxf'], ['csv-zone', 'csv'], ['nos-zone', 'nosCsv']].forEach(([id, type]) => {
+  [['nos-zone', 'nosCsv']].forEach(([id, type]) => {
     const zone = document.getElementById(id);
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
@@ -1914,6 +1881,105 @@ Engineer
       handleFile(type, file);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Panel 01 — geometry, Pin BC and loads in one zone (Rev 46)
+  //
+  // Three panels became one. Nothing downstream changed: each file is routed
+  // into the SAME state slot its old panel used, and the same three preview
+  // renderers run, so generate() cannot tell the difference.
+  //
+  // Routing is by CONTENT, not by filename or by which zone was used. A .dxf
+  // is geometry or Pin BC according to whether it holds more LINEs or more
+  // POINTs, counted with the page's own parsers rather than a regex -- those
+  // parsers already know how to walk group-code pairs, and "LINE" appearing as
+  // a layer name would fool a naive text match.
+  //
+  // A TIE goes to geometry. That only arises for a file with equal numbers of
+  // both, which no real drawing here produces; it is written down because
+  // "majority wins" does not answer it on its own.
+  //
+  // ANY .csv is taken as the Matched Load CSV, on the user's instruction and
+  // knowing the risk: loadCsvLayout falls back to positional columns when it
+  // does not recognise the headers, so a Notional Loads CSV dropped here would
+  // be read as load data without complaint. The chip names what each file was
+  // detected as, which is the visibility that makes that survivable.
+  const MODEL_SLOTS = {
+    dxf:    { label: 'Geometry DXF',     preview: 'dxf-preview',   render: t => renderHssDxfPreview(t) },
+    pinDxf: { label: 'Pin BC DXF',       preview: 'pinbc-preview', render: t => renderPinBcPreview(t) },
+    csv:    { label: 'Matched Load CSV', preview: 'csv-preview',   render: t => renderCsvPreview(t) },
+  };
+  const modelFiles = [];   // { name, slot, note } -- one per accepted file
+
+  function detectModelSlot(name, text) {
+    if (/\.csv$/i.test(name)) return { slot: 'csv', note: '' };
+    const nLines = parseDxfLines(text).length;
+    const nPoints = parseDxfPoints(text).length;
+    if (nLines === 0 && nPoints === 0) return { slot: null, note: 'no LINE or POINT entities' };
+    const slot = nPoints > nLines ? 'pinDxf' : 'dxf';
+    // Both present: say so, with the counts, rather than choosing in silence.
+    const note = (nLines && nPoints) ? `${nLines} lines, ${nPoints} points` : '';
+    return { slot, note };
+  }
+
+  function renderModelFiles() {
+    document.getElementById('model-filelist').innerHTML = modelFiles.map((f, i) =>
+      f.slot
+        ? `<span class="merge-file-chip" title="${xmlEsc(f.note || MODEL_SLOTS[f.slot].label)}">`
+          + `${xmlEsc(f.name)} <span class="chip-count">${xmlEsc(MODEL_SLOTS[f.slot].label)}</span>`
+          + `<button class="chip-remove" data-i="${i}">✕</button></span>`
+        : `<span class="merge-file-chip invalid" title="${xmlEsc(f.note)}">⚠ ${xmlEsc(f.name)}`
+          + `<button class="chip-remove" data-i="${i}">✕</button></span>`
+    ).join('');
+  }
+
+  function clearModelSlot(slot) {
+    state[slot] = null;
+    const box = document.getElementById(MODEL_SLOTS[slot].preview);
+    box.classList.remove('has-content');
+    box.innerHTML = '<span>No file loaded.</span>';
+  }
+
+  async function addModelFiles(fileList) {
+    // Snapshotted before the first await: e.target.files is live and clearing
+    // the input mid-loop truncates it, the trap the merge panel documents.
+    for (const file of [...fileList]) {
+      const text = await file.text();
+      const { slot, note } = detectModelSlot(file.name, text);
+      if (slot) {
+        // One file per slot. A second geometry DXF replaces the first rather
+        // than being added alongside it, so what is loaded always matches the
+        // chips and generate() cannot read a file the user thinks they removed.
+        const prev = modelFiles.findIndex(f => f.slot === slot);
+        if (prev !== -1) modelFiles.splice(prev, 1);
+        state[slot] = text;
+        MODEL_SLOTS[slot].render(text);
+      }
+      modelFiles.push({ name: file.name, slot, note });
+    }
+    renderModelFiles();
+    updateGenerateButton();
+  }
+
+  (() => {
+    const zone = document.getElementById('model-zone');
+    const input = document.getElementById('model-input');
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('dragover');
+      addModelFiles(e.dataTransfer.files);
+    });
+    input.addEventListener('change', async e => { await addModelFiles(e.target.files); input.value = ''; });
+    document.getElementById('model-filelist').addEventListener('click', e => {
+      const btn = e.target.closest('.chip-remove');
+      if (!btn) return;
+      const f = modelFiles.splice(Number(btn.dataset.i), 1)[0];
+      if (f && f.slot) clearModelSlot(f.slot);
+      renderModelFiles();
+      updateGenerateButton();
+    });
+  })();
 
   // Panel 05 takes several files at once, so it wires its own zone rather than
   // joining the single-file loop above.
@@ -1932,15 +1998,6 @@ Engineer
   // never disagree and a revision number can't accidentally be reused.
   document.getElementById('version-badge').textContent = 'Rev ' + APP_REV;
 
-  document.getElementById('dxf-input').addEventListener('change', e => {
-    if (e.target.files[0]) handleFile('dxf', e.target.files[0]);
-  });
-  document.getElementById('pinbc-input').addEventListener('change', e => {
-    if (e.target.files[0]) handleFile('pinDxf', e.target.files[0]);
-  });
-  document.getElementById('csv-input').addEventListener('change', e => {
-    if (e.target.files[0]) handleFile('csv', e.target.files[0]);
-  });
   document.getElementById('nos-input').addEventListener('change', e => {
     if (e.target.files[0]) handleFile('nosCsv', e.target.files[0]);
   });
@@ -2124,12 +2181,6 @@ Engineer
     updateGenerateButton();
   }
 
-  document.getElementById('dxf-clear').addEventListener('click', () =>
-    clearPanel('dxf', 'dxf', 'dxf-input', 'dxf-preview', 'No file loaded.'));
-  document.getElementById('pinbc-clear').addEventListener('click', () =>
-    clearPanel('pinDxf', 'pinbc', 'pinbc-input', 'pinbc-preview', 'No file loaded.'));
-  document.getElementById('csv-clear').addEventListener('click', () =>
-    clearPanel('csv', 'csv', 'csv-input', 'csv-preview', 'No file loaded.'));
   document.getElementById('nos-clear').addEventListener('click', () =>
     clearPanel('nosCsv', 'nos', 'nos-input', 'nos-preview', 'No file loaded.'));
 
