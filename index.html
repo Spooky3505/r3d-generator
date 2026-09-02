@@ -528,6 +528,19 @@
     .error-bar.visible { display: block; }
 
     /* ── Combine Load Files section ──────────────────────── */
+    /* Pin BC -> DXF and Joist Checks sit side by side: they are two steps on
+       the same RISA file, the .r3d going out through the first and its CSV
+       coming back through the second. The pair collapses to one column at the
+       same 760px breakpoint .panels uses. */
+    .section-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+      align-items: start;
+    }
+    .section-pair > .merge-section { margin-bottom: 0; }
+
     .merge-section {
       background: var(--canvas);
       border: 1px solid var(--hairline);
@@ -706,13 +719,23 @@
     }
     .panel-wide { grid-column: 1 / -1; }
 
-    #btn-merge-download, #btn-pinexp-download, #btn-joist-download {
+    #btn-merge-download, #btn-pinexp-download {
       background: var(--primary);
       color: #ffffff;
       display: none;
     }
-    #btn-merge-download:hover, #btn-pinexp-download:hover, #btn-joist-download:hover { background: var(--primary-focus); }
-    #btn-merge-download.visible, #btn-pinexp-download.visible, #btn-joist-download.visible { display: block; }
+    #btn-merge-download:hover, #btn-pinexp-download:hover { background: var(--primary-focus); }
+    #btn-merge-download.visible, #btn-pinexp-download.visible { display: block; }
+
+    /* Always on the page, disabled until both files are in -- the same shape as
+       #btn-generate and #btn-merge. A hidden button reads as a missing one. */
+    #btn-joist-fill { background: var(--primary); color: #ffffff; }
+    #btn-joist-fill:hover:not(:disabled) { background: var(--primary-focus); }
+    #btn-joist-fill:disabled {
+      background: var(--hairline);
+      color: var(--ink-muted-48);
+      cursor: not-allowed;
+    }
 
     /* ── Dark mode ───────────────────────────────────────── */
     body.dark {
@@ -825,6 +848,7 @@
     /* ── Responsive ──────────────────────────────────────── */
     @media (max-width: 760px) {
       .panels { grid-template-columns: 1fr; }
+      .section-pair { grid-template-columns: 1fr; }
       .summary-stats { grid-template-columns: repeat(3, 1fr); }
       .summary-stats .stat-box:nth-child(3) { border-right: none; }
       .main { padding: 20px 16px 48px; }
@@ -973,63 +997,68 @@
     </div>
   </div>
 
-  <!-- Pin BC → DXF export. Runs the OPPOSITE direction to the five panels
-       above: they feed one Generate that writes an .r3d, this reads one. Its
-       own section and its own button so Generate keeps one meaning. -->
-  <div class="merge-section" id="pinexp-section">
-    <div class="merge-header">
-      <span class="step-badge">↩</span>
-      <div>
-        <div class="merge-title">Pin BC → DXF</div>
-        <div class="merge-sub">Drop a RISA <code>.r3d</code> to extract every node with a pinned support into a DXF, on layer <code>PIN_BC</code>, for the Joist checks AutoLISP.</div>
+  <!-- Two steps on the same RISA file, so they sit side by side: the .r3d
+       goes out through Pin BC → DXF, and the CSV the AutoLISP makes from
+       that DXF comes back through Joist Checks. -->
+  <div class="section-pair">
+    <!-- Pin BC → DXF export. Runs the OPPOSITE direction to the five panels
+         above: they feed one Generate that writes an .r3d, this reads one. Its
+         own section and its own button so Generate keeps one meaning. -->
+    <div class="merge-section" id="pinexp-section">
+      <div class="merge-header">
+        <span class="step-badge">↩</span>
+        <div>
+          <div class="merge-title">Pin BC → DXF</div>
+          <div class="merge-sub">Drop a RISA <code>.r3d</code> to extract every node with a pinned support into a DXF, on layer <code>PIN_BC</code>, for the Joist checks AutoLISP.</div>
+        </div>
+      </div>
+
+      <div class="drop-zone" id="pinexp-zone">
+        <input type="file" id="pinexp-input" accept=".r3d">
+        <div class="drop-icon">📍</div>
+        <div class="drop-label">Drop a file here or <span>browse</span></div>
+        <div class="drop-hint">Accepted: .r3d — one RISA-3D model</div>
+      </div>
+
+      <div class="preview-label">Support Summary</div>
+      <div class="preview-box" id="pinexp-preview"><span>No file loaded.</span></div>
+
+      <div class="warnings-area" id="pinexp-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
+
+      <div class="actions" style="margin-top:16px; margin-bottom:0;">
+        <button id="btn-pinexp-download">Download Pin BC DXF</button>
       </div>
     </div>
 
-    <div class="drop-zone" id="pinexp-zone">
-      <input type="file" id="pinexp-input" accept=".r3d">
-      <div class="drop-icon">📍</div>
-      <div class="drop-label">Drop a file here or <span>browse</span></div>
-      <div class="drop-hint">Accepted: .r3d — one RISA-3D model</div>
-    </div>
-
-    <div class="preview-label">Support Summary</div>
-    <div class="preview-box" id="pinexp-preview"><span>No file loaded.</span></div>
-
-    <div class="warnings-area" id="pinexp-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
-
-    <div class="actions" style="margin-top:16px; margin-bottom:0;">
-      <button id="btn-pinexp-download">Download Pin BC DXF</button>
-    </div>
-  </div>
-
-  <!-- Joist Checks. Like Combine Load Files and Pin BC -> DXF this is an
-       .xlsx -> .xlsx side road: it never feeds Generate, so it gets its own
-       section and its own button rather than a numbered panel. -->
-  <div class="merge-section" id="joist-section">
-    <div class="merge-header">
-      <span class="step-badge">📐</span>
-      <div>
-        <div class="merge-title">Joist Checks → JOIST LOADS.xlsx</div>
-        <div class="merge-sub">Drop the <code>JOISTCHECK</code> CSV and the <code>JOIST LOADS</code> workbook. Fills the <strong>Joist checks</strong> sheet in place — the two-step “paste column A, then paste column B with Skip blanks” done for you, with every formula left alone.</div>
+    <!-- Joist Checks. Like Combine Load Files and Pin BC -> DXF this is an
+         .xlsx -> .xlsx side road: it never feeds Generate, so it gets its own
+         section and its own button rather than a numbered panel. -->
+    <div class="merge-section" id="joist-section">
+      <div class="merge-header">
+        <span class="step-badge">📐</span>
+        <div>
+          <div class="merge-title">Joist Checks → JOIST LOADS.xlsx</div>
+          <div class="merge-sub">Drop the <code>JOISTCHECK</code> CSV and the <code>JOIST LOADS</code> workbook. Fills the <strong>Joist checks</strong> sheet in place — the two-step “paste column A, then paste column B with Skip blanks” done for you, with every formula left alone.</div>
+        </div>
       </div>
-    </div>
 
-    <div class="drop-zone" id="joist-zone">
-      <input type="file" id="joist-input" accept=".csv,.xlsx" multiple>
-      <div class="drop-icon">🧱</div>
-      <div class="drop-label">Drop files here or <span>browse</span></div>
-      <div class="drop-hint">Accepted: .csv (the JOISTCHECK export) and .xlsx (the JOIST LOADS workbook)</div>
-    </div>
+      <div class="drop-zone" id="joist-zone">
+        <input type="file" id="joist-input" accept=".csv,.xlsx" multiple>
+        <div class="drop-icon">🧱</div>
+        <div class="drop-label">Drop files here or <span>browse</span></div>
+        <div class="drop-hint">Accepted: .csv (the JOISTCHECK export) and .xlsx (the JOIST LOADS workbook)</div>
+      </div>
 
-    <div class="merge-filelist" id="joist-filelist"></div>
+      <div class="merge-filelist" id="joist-filelist"></div>
 
-    <div class="preview-label">Fill Summary</div>
-    <div class="preview-box" id="joist-preview"><span>No files loaded.</span></div>
+      <div class="preview-label">Fill Summary</div>
+      <div class="preview-box" id="joist-preview"><span>No files loaded.</span></div>
 
-    <div class="warnings-area" id="joist-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
+      <div class="warnings-area" id="joist-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
 
-    <div class="actions" style="margin-top:16px; margin-bottom:0;">
-      <button id="btn-joist-download">Download filled workbook</button>
+      <div class="actions" style="margin-top:16px; margin-bottom:0;">
+        <button id="btn-joist-fill" disabled title="Drop the JOISTCHECK .csv and the JOIST LOADS .xlsx">Fill Workbook</button>
+      </div>
     </div>
   </div>
 
@@ -1099,7 +1128,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 47;
+  const APP_REV = 48;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -4533,7 +4562,7 @@ Engineer
   const joistPreview  = document.getElementById('joist-preview');
   const joistWarnings = document.getElementById('joist-warnings');
   const joistList     = document.getElementById('joist-filelist');
-  const joistDownload = document.getElementById('btn-joist-download');
+  const joistFill     = document.getElementById('btn-joist-fill');
 
   joistZone.addEventListener('dragover',  e => { e.preventDefault(); joistZone.classList.add('dragover'); });
   joistZone.addEventListener('dragleave', () => joistZone.classList.remove('dragover'));
@@ -4579,7 +4608,12 @@ Engineer
     joistWarnings.style.display=msgs.length?'block':'none';
 
     const blocked = !s.parsed || !s.xlsxBuf || s.parsed.errors.length>0;
-    joistDownload.classList.toggle('visible', !blocked);
+    joistFill.disabled = blocked;
+    // The button never leaves the page, so it has to say what it is waiting for.
+    joistFill.title = !s.parsed   ? 'Drop the JOISTCHECK .csv'
+                    : s.parsed.errors.length ? 'Fix the errors listed above'
+                    : !s.xlsxBuf  ? 'Drop the JOIST LOADS .xlsx'
+                    : 'Fill ' + joistOutputName(s.xlsxName) + ' and download it';
 
     if(!s.parsed && !s.xlsxBuf){ joistPreview.innerHTML='<span>No files loaded.</span>'; return; }
     const parts=[];
@@ -4599,12 +4633,12 @@ Engineer
     joistPreview.innerHTML=parts.join('');
   }
 
-  joistDownload.addEventListener('click', async () => {
+  joistFill.addEventListener('click', async () => {
     const s=joistState;
     if(!s.parsed || !s.xlsxBuf || s.parsed.errors.length) return;
-    joistDownload.disabled=true;
-    const label=joistDownload.textContent;
-    joistDownload.textContent='Filling…';
+    joistFill.disabled=true;
+    const label=joistFill.textContent;
+    joistFill.textContent='Filling…';
     try {
       const r=await fillJoistWorkbook(s.xlsxBuf, s.parsed.blocks);
       const a=document.createElement('a');
@@ -4623,7 +4657,7 @@ Engineer
       joistWarnings.innerHTML=`<div>✕ ${jcEsc(err.message)}</div>`;
       joistWarnings.style.display='block';
     } finally {
-      joistDownload.disabled=false; joistDownload.textContent=label;
+      joistFill.disabled=false; joistFill.textContent=label;
     }
   });
 </script>
