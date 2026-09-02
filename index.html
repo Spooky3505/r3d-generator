@@ -706,13 +706,13 @@
     }
     .panel-wide { grid-column: 1 / -1; }
 
-    #btn-merge-download, #btn-pinexp-download {
+    #btn-merge-download, #btn-pinexp-download, #btn-joist-download {
       background: var(--primary);
       color: #ffffff;
       display: none;
     }
-    #btn-merge-download:hover, #btn-pinexp-download:hover { background: var(--primary-focus); }
-    #btn-merge-download.visible, #btn-pinexp-download.visible { display: block; }
+    #btn-merge-download:hover, #btn-pinexp-download:hover, #btn-joist-download:hover { background: var(--primary-focus); }
+    #btn-merge-download.visible, #btn-pinexp-download.visible, #btn-joist-download.visible { display: block; }
 
     /* ── Dark mode ───────────────────────────────────────── */
     body.dark {
@@ -1002,6 +1002,37 @@
     </div>
   </div>
 
+  <!-- Joist Checks. Like Combine Load Files and Pin BC -> DXF this is an
+       .xlsx -> .xlsx side road: it never feeds Generate, so it gets its own
+       section and its own button rather than a numbered panel. -->
+  <div class="merge-section" id="joist-section">
+    <div class="merge-header">
+      <span class="step-badge">📐</span>
+      <div>
+        <div class="merge-title">Joist Checks → JOIST LOADS.xlsx</div>
+        <div class="merge-sub">Drop the <code>JOISTCHECK</code> CSV and the <code>JOIST LOADS</code> workbook. Fills the <strong>Joist checks</strong> sheet in place — the two-step “paste column A, then paste column B with Skip blanks” done for you, with every formula left alone.</div>
+      </div>
+    </div>
+
+    <div class="drop-zone" id="joist-zone">
+      <input type="file" id="joist-input" accept=".csv,.xlsx" multiple>
+      <div class="drop-icon">🧱</div>
+      <div class="drop-label">Drop files here or <span>browse</span></div>
+      <div class="drop-hint">Accepted: .csv (the JOISTCHECK export) and .xlsx (the JOIST LOADS workbook)</div>
+    </div>
+
+    <div class="merge-filelist" id="joist-filelist"></div>
+
+    <div class="preview-label">Fill Summary</div>
+    <div class="preview-box" id="joist-preview"><span>No files loaded.</span></div>
+
+    <div class="warnings-area" id="joist-warnings" style="display:none; border-radius: 0 0 8px 8px;"></div>
+
+    <div class="actions" style="margin-top:16px; margin-bottom:0;">
+      <button id="btn-joist-download">Download filled workbook</button>
+    </div>
+  </div>
+
   <!-- Model summary card (shown after generation) -->
   <div class="summary-card" id="summary-card">
     <div class="summary-header">
@@ -1068,7 +1099,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 46;
+  const APP_REV = 47;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -4126,6 +4157,475 @@ Engineer
 
   // Restore saved preference (default: light)
   applyTheme(localStorage.getItem('r3d-theme') === 'dark');
+
+  // ===========================================================================
+  // Joist Checks — fill the JOIST LOADS workbook from JOISTCHECK's CSV
+  // ===========================================================================
+  //
+  // Autolisp/JOISTCHECK_Rev_6.lsp writes a CSV that is not a data table but a
+  // layout-shaped payload: blocks of exactly 13 rows —
+  //
+  //   row N     A="Joist:"   B=<block label>
+  //   row N+1 .. N+10        ten node-label rows, blank-padded
+  //   row N+11  A="Total:"
+  //   row N+12  (blank separator)
+  //
+  // and its printed instructions say to paste column A onto A2 of the "Joist
+  // checks" sheet, then column B onto B2 with Paste Special > Skip blanks. That
+  // second step is load-bearing: column B is blank on the ten node rows, and a
+  // plain paste would wipe the VLOOKUP in B3:B12 of every block. This module is
+  // those two pastes, done without Excel.
+  //
+  // The fill is POSITIONAL, block i landing on row 2 + 13i. It is not keyed on
+  // the block label, and that was measured rather than assumed: the labels in
+  // the workbook's column B and the labels in the CSV have an intersection of
+  // ZERO. The workbook ships with placeholder labels from another project
+  // (its own absPath says "Template-Risa Calculation/Resource/") and the CSV is
+  // what overwrites them. A label-keyed fill would have filled nothing.
+  //
+  // Blocks the CSV does not reach get their ten node rows emptied, so they total
+  // 0 instead of quietly reporting the template's leftovers as real. The header
+  // word, the column-B label and the Total: row stay — AK1 counts header rows
+  // with COUNTIF(A1:A573,"*joist*"), and blanking headers would move it.
+  //
+  // Everything else in the file is copied through as raw compressed bytes:
+  // 11 sheets, 4 of them hidden, two drawings and four images, ~14 MB unzipped.
+  // Only the target sheet and workbook.xml are re-encoded. See
+  // docs/plans/joist-checks-panel.md.
+  //
+  // === JOIST-CORE-START === (tools/joist-harness.mjs extracts between these
+  // markers to run the fill in Node — same trick as CORE-START/END above. The
+  // core is deliberately self-contained, hence its own esc/crc32 rather than
+  // the merge module's: the harness lifts this block and nothing else.)
+
+  const JC_STRIDE = 13;   // header + 10 node rows + Total: + blank separator
+  const JC_NODES  = 10;   // a block holds ten node labels and no more
+  const JC_ANCHOR = 2;    // A2 — the paste anchor the LISP prints
+
+  const jcEsc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const jcUnesc = s => String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+    .replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+    .replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCodePoint(parseInt(h,16)))
+    .replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(+n))
+    .replace(/&amp;/g,'&');   // last, so "&amp;lt;" doesn't become "<"
+
+  const JC_CRC=(()=>{const t=new Uint32Array(256);
+    for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}
+    return t;})();
+  function jcCrc32(u8){ let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c=JC_CRC[(c^u8[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+
+  const jcColOf = ref => { const s=/^[A-Z]+/.exec(ref)[0]; let n=0; for(const ch of s) n=n*26+ch.charCodeAt(0)-64; return n; };
+
+  // --- the CSV ---------------------------------------------------------------
+
+  function jcSplitCsv(text){
+    const rows=[]; let row=[], cell='', q=false;
+    for(let i=0;i<text.length;i++){
+      const ch=text[i];
+      if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=ch; }
+      else if(ch==='"') q=true;
+      else if(ch===',') { row.push(cell); cell=''; }
+      else if(ch==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; }
+      else if(ch!=='\r') cell+=ch;
+    }
+    row.push(cell); rows.push(row);
+    // The final block's blank separator is padding the writer never emits, and
+    // a trailing newline adds one more empty row. Both are trimmed here and the
+    // block loop pads back out, so neither counts as a stride error.
+    while(rows.length && rows[rows.length-1].every(c=>c.trim()==='')) rows.pop();
+    return rows;
+  }
+
+  const jcIsHeader = s => /^(joist|girder):$/i.test(String(s).trim());
+
+  function parseJoistCsv(text){
+    const rows=jcSplitCsv(text);
+    if(!rows.length) throw new Error('CSV is empty');
+    const at=(r,c)=>String((rows[r]||[])[c]??'').trim();
+    if(!jcIsHeader(at(0,0)))
+      throw new Error('Row 1 column A is not "Joist:" or "Girder:" — this does not look like a JOISTCHECK export');
+
+    const errors=[], warnings=[], blocks=[];
+    const count=Math.ceil(rows.length/JC_STRIDE);
+    for(let b=0;b<count;b++){
+      const r0=b*JC_STRIDE;
+      const kind=at(r0,0);
+      if(!jcIsHeader(kind)){
+        // One bad anchor shifts every later block by a row, which is invisible
+        // in the output — so this refuses rather than warns.
+        errors.push(`Row ${r0+1} should start block ${b+1} but column A reads "${kind||'(blank)'}" — the file is off the 13-row stride`);
+        continue;
+      }
+      const label=at(r0,1);
+      const nodes=[];
+      for(let i=1;i<=JC_NODES;i++) nodes.push(at(r0+i,0));
+      const after=at(r0+JC_NODES+1,0);
+      if(after!=='' && !/^total:$/i.test(after))
+        errors.push(`Block ${b+1}${label?' ('+label+')':''} has more than ${JC_NODES} node rows — row ${r0+JC_NODES+2} reads "${after}" where "Total:" belongs`);
+      const sep=at(r0+JC_NODES+2,0);
+      if(sep!=='') warnings.push(`Block ${b+1}${label?' ('+label+')':''} has "${sep}" in its blank separator row (${r0+JC_NODES+3}) — ignored`);
+      if(!label) warnings.push(`Block ${b+1} (row ${r0+1}) has no label in column B`);
+      blocks.push({ kind, label, nodes, row:r0+1,
+        filled: nodes.filter(n=>n!=='').length });
+    }
+
+    // "# of joists:" is metadata the column-A paste never carried onto the
+    // sheet. A disagreement is worth saying out loud; it does not stop the fill.
+    let declared=null;
+    if(/#\s*of\s*joists/i.test(at(0,3))){
+      const n=parseInt(at(0,4),10);
+      if(Number.isFinite(n)){
+        declared=n;
+        if(n!==blocks.length)
+          warnings.push(`The CSV says "# of joists: ${n}" but carries ${blocks.length} blocks — going with the blocks`);
+      }
+    }
+    return { blocks, errors, warnings, declared };
+  }
+
+  // --- ZIP, with the untouched entries passed through compressed --------------
+
+  async function jcInflate(u8){
+    const s=new Response(u8.slice()).body.pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+  async function jcDeflate(u8){
+    const s=new Response(u8.slice()).body.pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+
+  function jcZipRead(buf){
+    const u8=new Uint8Array(buf), dv=new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let eocd=-1;
+    for(let i=u8.length-22;i>=0;i--){ if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+    if(eocd<0) throw new Error('Not a valid .xlsx (missing ZIP directory)');
+    const n=dv.getUint16(eocd+10,true);
+    let off=dv.getUint32(eocd+16,true);
+    const out=[];
+    for(let i=0;i<n;i++){
+      if(dv.getUint32(off,true)!==0x02014b50) break;
+      const method=dv.getUint16(off+10,true);
+      const crc=dv.getUint32(off+16,true);
+      const compSize=dv.getUint32(off+20,true);
+      const uncompSize=dv.getUint32(off+24,true);
+      const fnLen=dv.getUint16(off+28,true), exLen=dv.getUint16(off+30,true), cmLen=dv.getUint16(off+32,true);
+      const lho=dv.getUint32(off+42,true);
+      const name=new TextDecoder().decode(u8.subarray(off+46, off+46+fnLen));
+      const lfn=dv.getUint16(lho+26,true), lex=dv.getUint16(lho+28,true);
+      const start=lho+30+lfn+lex;
+      out.push({ name, method, crc, uncompSize, raw:u8.subarray(start, start+compSize) });
+      off+=46+fnLen+exLen+cmLen;
+    }
+    return out;
+  }
+
+  // Writes real CRCs and sizes into every local header, so no entry needs the
+  // data-descriptor flag even if the source used one.
+  function jcZipWrite(entries){
+    const enc=new TextEncoder(); const chunks=[]; let offset=0; const dir=[];
+    const push=u8=>{ chunks.push(u8); offset+=u8.length; };
+    for(const e of entries){
+      const nb=enc.encode(e.name);
+      const lh=new Uint8Array(30+nb.length); const dv=new DataView(lh.buffer);
+      dv.setUint32(0,0x04034b50,true); dv.setUint16(4,20,true); dv.setUint16(6,0,true);
+      dv.setUint16(8,e.method,true);
+      dv.setUint32(14,e.crc,true); dv.setUint32(18,e.raw.length,true); dv.setUint32(22,e.uncompSize,true);
+      dv.setUint16(26,nb.length,true); lh.set(nb,30);
+      const localOffset=offset; push(lh); push(e.raw);
+      dir.push({nb, method:e.method, crc:e.crc, comp:e.raw.length, unc:e.uncompSize, localOffset});
+    }
+    const cdStart=offset;
+    for(const r of dir){
+      const ch=new Uint8Array(46+r.nb.length); const dv=new DataView(ch.buffer);
+      dv.setUint32(0,0x02014b50,true); dv.setUint16(4,20,true); dv.setUint16(6,20,true);
+      dv.setUint16(10,r.method,true);
+      dv.setUint32(16,r.crc,true); dv.setUint32(20,r.comp,true); dv.setUint32(24,r.unc,true);
+      dv.setUint16(28,r.nb.length,true); dv.setUint32(42,r.localOffset,true); ch.set(r.nb,46);
+      push(ch);
+    }
+    const cdSize=offset-cdStart;
+    const eo=new Uint8Array(22); const dv=new DataView(eo.buffer);
+    dv.setUint32(0,0x06054b50,true); dv.setUint16(8,dir.length,true); dv.setUint16(10,dir.length,true);
+    dv.setUint32(12,cdSize,true); dv.setUint32(16,cdStart,true); push(eo);
+    const out=new Uint8Array(offset); let p=0; for(const c of chunks){ out.set(c,p); p+=c.length; }
+    return out;
+  }
+
+  // --- cell surgery ----------------------------------------------------------
+  //
+  // Cells are patched in place so the `s=` attribute survives: s="50" on the
+  // header, s="52" on the node rows, s="49" on the label are the yellow fill
+  // and borders. Emitting a fresh <c> would drop them.
+  // Values go in as t="inlineStr" rather than as new shared strings, because
+  // renumbering sharedStrings.xml would mean rewriting the ten other sheets
+  // that index into it. VLOOKUP cannot tell the two apart.
+
+  function jcSetCell(rowText, ref, val){
+    const m=new RegExp(`<c r="${ref}"([^>]*?)(/>|>([\\s\\S]*?)</c>)`).exec(rowText);
+    let attrs='';
+    if(m){
+      if(m[3] && /<f[\s/>]/.test(m[3]))
+        throw new Error(`Refusing to overwrite ${ref} — it holds a formula`);
+      attrs=m[1].replace(/\s*\/$/,'').replace(/\s+t="[^"]*"/g,'');
+    }
+    const cell = val===''
+      ? `<c r="${ref}"${attrs}/>`
+      : `<c r="${ref}"${attrs} t="inlineStr"><is><t xml:space="preserve">${jcEsc(val)}</t></is></c>`;
+    if(m) return rowText.slice(0,m.index)+cell+rowText.slice(m.index+m[0].length);
+    // Absent — insert in column order rather than skipping it.
+    if(!/<\/row>\s*$/.test(rowText)) return rowText.replace(/\/>\s*$/,'>')+cell+'</row>';
+    const cre=/<c r="([A-Z]+\d+)"/g; const want=jcColOf(ref); let cm, pos=-1;
+    while((cm=cre.exec(rowText))){ if(jcColOf(cm[1])>want){ pos=cm.index; break; } }
+    return pos<0 ? rowText.replace(/<\/row>\s*$/, cell+'</row>')
+                 : rowText.slice(0,pos)+cell+rowText.slice(pos);
+  }
+
+  function jcGetCell(rowText, ref, shared){
+    const m=new RegExp(`<c r="${ref}"([^>]*?)(/>|>([\\s\\S]*?)</c>)`).exec(rowText);
+    if(!m || !m[3]) return '';
+    if(/t="s"/.test(m[1])){ const v=/<v>([\s\S]*?)<\/v>/.exec(m[3]); return v ? (shared[+v[1]] ?? '') : ''; }
+    if(/t="inlineStr"/.test(m[1])){ let s=''; for(const t of m[3].match(/<t[^>]*>[\s\S]*?<\/t>/g)||[]) s+=jcUnesc(t.replace(/^<t[^>]*>/,'').replace(/<\/t>$/,'')); return s; }
+    const v=/<v>([\s\S]*?)<\/v>/.exec(m[3]); return v ? jcUnesc(v[1]) : '';
+  }
+
+  // --- the fill --------------------------------------------------------------
+
+  async function fillJoistWorkbook(buf, blocks){
+    const entries=jcZipRead(buf);
+    const byName=new Map(entries.map(e=>[e.name,e]));
+    const dec=new TextDecoder(), enc=new TextEncoder();
+    const textOf=async e => dec.decode(e.method===0 ? e.raw : await jcInflate(e.raw));
+
+    const wbE=byName.get('xl/workbook.xml');
+    if(!wbE) throw new Error('Not an .xlsx workbook — xl/workbook.xml is missing');
+    let wbXml=await textOf(wbE);
+    const sm=/<sheet [^>]*name="Joist checks"[^>]*\/>/.exec(wbXml);
+    if(!sm) throw new Error('This workbook has no sheet called "Joist checks"');
+    const rid=(/r:id="([^"]+)"/.exec(sm[0])||[])[1];
+    const relsE=byName.get('xl/_rels/workbook.xml.rels');
+    if(!relsE || !rid) throw new Error('Cannot resolve the "Joist checks" sheet in the workbook');
+    let relsXml=await textOf(relsE);
+    const rm=new RegExp(`<Relationship[^>]*Id="${rid}"[^>]*/>`).exec(relsXml);
+    const target=(/Target="([^"]+)"/.exec(rm ? rm[0] : '')||[])[1];
+    if(!target) throw new Error('Cannot resolve the "Joist checks" sheet in the workbook');
+    const sheetPath='xl/'+target.replace(/^\/?(xl\/)?/,'');
+    const sheetE=byName.get(sheetPath);
+    if(!sheetE) throw new Error(`The workbook names ${sheetPath} but does not contain it`);
+
+    const shared=[];
+    const ssE=byName.get('xl/sharedStrings.xml');
+    if(ssE){
+      const x=await textOf(ssE);
+      for(const si of x.match(/<si>[\s\S]*?<\/si>/g)||[]){
+        let s=''; for(const t of si.match(/<t[^>]*>[\s\S]*?<\/t>/g)||[]) s+=jcUnesc(t.replace(/^<t[^>]*>/,'').replace(/<\/t>$/,''));
+        shared.push(s);
+      }
+    }
+
+    const sheetXml=await textOf(sheetE);
+    const openAt=sheetXml.indexOf('<sheetData>'), closeAt=sheetXml.indexOf('</sheetData>');
+    if(openAt<0 || closeAt<0) throw new Error('The "Joist checks" sheet has no <sheetData>');
+    const head=sheetXml.slice(0, openAt+'<sheetData>'.length);
+    const tail=sheetXml.slice(closeAt);
+    const body=sheetXml.slice(openAt+'<sheetData>'.length, closeAt);
+
+    // Split the rows once and patch the array. Re-running a replace over an
+    // 8 MB string for each of ~2000 edited rows would copy gigabytes.
+    const rows=[]; const index=new Map();
+    const rowRe=/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
+    let rm2;
+    while((rm2=rowRe.exec(body))){
+      const n=parseInt((/\br="(\d+)"/.exec(rm2[1])||[])[1], 10);
+      if(!Number.isFinite(n)) continue;
+      index.set(n, rows.length);
+      rows.push({ n, text:rm2[0] });
+    }
+
+    const rowText=n=>{ const i=index.get(n); return i===undefined ? null : rows[i].text; };
+    function setCell(n, ref, val){
+      let i=index.get(n);
+      if(i===undefined){ index.set(n, rows.length); rows.push({ n, text:`<row r="${n}"></row>` }); i=rows.length-1; }
+      rows[i].text=jcSetCell(rows[i].text, ref, val);
+    }
+
+    // How many blocks does the sheet actually hold? Walk the stride until a
+    // header stops being a header — 215 in JOIST LOADS_rev1.xlsx.
+    let sheetBlocks=0;
+    for(;;){
+      const r=rowText(JC_ANCHOR+JC_STRIDE*sheetBlocks);
+      if(r===null || !jcIsHeader(jcGetCell(r,'A'+(JC_ANCHOR+JC_STRIDE*sheetBlocks), shared))) break;
+      sheetBlocks++;
+    }
+    if(!sheetBlocks) throw new Error('No "Joist:" block found at A2 — is this the JOIST LOADS workbook?');
+
+    // The stride is uniform only as far as that walk reaches. In
+    // JOIST LOADS_rev1.xlsx it holds for 192 blocks and then the girder tail
+    // runs on gaps of 14-26 rows, so 23 further blocks sit off the grid. They
+    // are left alone — but reported, never silently skipped.
+    const lastUniformRow=JC_ANCHOR+JC_STRIDE*sheetBlocks-1;
+    const trailing=[];
+    for(const r of rows){
+      if(r.n<=lastUniformRow) continue;
+      if(jcIsHeader(jcGetCell(r.text,'A'+r.n, shared))) trailing.push(r.n);
+    }
+    if(blocks.length>sheetBlocks)
+      throw new Error(`The CSV has ${blocks.length} blocks but the sheet holds ${sheetBlocks} — writing past row ${JC_ANCHOR+JC_STRIDE*sheetBlocks} would leave the block grid`);
+
+    let cellsWritten=0, cleared=0;
+    const write=(n,ref,v)=>{ setCell(n,ref,v); cellsWritten++; };
+    for(let b=0;b<sheetBlocks;b++){
+      const R=JC_ANCHOR+JC_STRIDE*b, blk=blocks[b];
+      if(blk){
+        write(R, 'A'+R, blk.kind);                       // the paste of column A…
+        write(R, 'B'+R, blk.label);                      // …and column B, header row only
+        for(let i=0;i<JC_NODES;i++) write(R+1+i, 'A'+(R+1+i), blk.nodes[i]);
+        write(R+JC_NODES+1, 'A'+(R+JC_NODES+1), 'Total:');
+        write(R+JC_NODES+2, 'A'+(R+JC_NODES+2), '');
+      } else {
+        // Node rows only: the header, its label and Total: stay put.
+        for(let i=0;i<JC_NODES;i++) write(R+1+i, 'A'+(R+1+i), '');
+        cleared++;
+      }
+    }
+
+    rows.sort((a,b)=>a.n-b.n);
+    const newSheet=head+rows.map(r=>r.text).join('')+tail;
+
+    // Every cached <v> on the sheet is now stale. fullCalcOnLoad makes Excel
+    // recompute on open; dropping calcChain.xml stops it validating a stale
+    // chain against changed cells, which is a known repair-prompt trigger. Its
+    // content-type Override and relationship go with it — a part named but not
+    // present is itself a repair prompt.
+    wbXml = /<calcPr\b[^>]*\/>/.test(wbXml)
+      ? wbXml.replace(/<calcPr\b([^>]*?)\/>/, (_,a)=>`<calcPr${a.replace(/\s+fullCalcOnLoad="[^"]*"/g,'')} fullCalcOnLoad="1"/>`)
+      : wbXml.replace(/(<extLst\b|<\/workbook>)/, '<calcPr fullCalcOnLoad="1"/>$1');
+    relsXml = relsXml.replace(/<Relationship[^>]*\/calcChain"[^>]*\/>/g, '');
+
+    const ctE=byName.get('[Content_Types].xml');
+    let ctXml=ctE ? await textOf(ctE) : null;
+    if(ctXml) ctXml=ctXml.replace(/<Override[^>]*calcChain\.xml[^>]*\/>/g, '');
+
+    const patched=new Map([[sheetPath,newSheet], ['xl/workbook.xml',wbXml], ['xl/_rels/workbook.xml.rels',relsXml]]);
+    if(ctXml) patched.set('[Content_Types].xml', ctXml);
+
+    const out=[];
+    for(const e of entries){
+      if(e.name==='xl/calcChain.xml') continue;
+      const replacement=patched.get(e.name);
+      if(replacement===undefined){ out.push(e); continue; }   // raw bytes, untouched
+      const plain=enc.encode(replacement);
+      out.push({ name:e.name, method:8, crc:jcCrc32(plain), uncompSize:plain.length, raw:await jcDeflate(plain) });
+    }
+    return { bytes:jcZipWrite(out), sheetPath, sheetBlocks, cellsWritten, cleared,
+             trailing:{ count:trailing.length, firstRow:trailing[0]??null, afterRow:lastUniformRow } };
+  }
+
+  function joistOutputName(xlsxName){
+    return xlsxName.replace(/\.xlsx$/i,'') + ' - filled.xlsx';
+  }
+  // === JOIST-CORE-END ===
+
+  // --- UI wiring -------------------------------------------------------------
+  const joistState = { csvName:'', xlsxName:'', parsed:null, xlsxBuf:null, error:'' };
+  const joistZone     = document.getElementById('joist-zone');
+  const joistInput    = document.getElementById('joist-input');
+  const joistPreview  = document.getElementById('joist-preview');
+  const joistWarnings = document.getElementById('joist-warnings');
+  const joistList     = document.getElementById('joist-filelist');
+  const joistDownload = document.getElementById('btn-joist-download');
+
+  joistZone.addEventListener('dragover',  e => { e.preventDefault(); joistZone.classList.add('dragover'); });
+  joistZone.addEventListener('dragleave', () => joistZone.classList.remove('dragover'));
+  joistZone.addEventListener('drop', async e => {
+    e.preventDefault(); joistZone.classList.remove('dragover'); await addJoistFiles(e.dataTransfer.files);
+  });
+  // Cleared after the read, not before — the same live-FileList trap the merge
+  // panel documents above.
+  joistInput.addEventListener('change', async e => { await addJoistFiles(e.target.files); joistInput.value=''; });
+
+  async function addJoistFiles(fileList){
+    // One zone, routed by extension: .csv is the JOISTCHECK export, .xlsx the
+    // workbook. Dropping a second file of either kind replaces the first.
+    const files=Array.from(fileList||[]);
+    // Reset once, not per file: dropping a bad .csv and a good .xlsx together
+    // would otherwise let the .xlsx's success wipe the .csv's reason for failing.
+    joistState.error='';
+    for(const f of files){
+      const ext=f.name.slice(f.name.lastIndexOf('.')+1).toLowerCase();
+      try {
+        if(ext==='csv'){ joistState.csvName=f.name; joistState.parsed=parseJoistCsv(await f.text()); }
+        else if(ext==='xlsx'){ joistState.xlsxName=f.name; joistState.xlsxBuf=await f.arrayBuffer(); }
+        else joistState.error=`${f.name}: expected a .csv or an .xlsx`;
+      } catch(err){
+        if(ext==='csv'){ joistState.csvName=f.name; joistState.parsed=null; }
+        joistState.error=`${f.name}: ${err.message}`;
+      }
+    }
+    renderJoist();
+  }
+
+  function renderJoist(){
+    const s=joistState;
+    joistList.innerHTML=[
+      s.csvName  ? `<span class="merge-file-chip${s.parsed?'':' invalid'}">${s.parsed?'':'⚠ '}${jcEsc(s.csvName)}${s.parsed?` <span class="chip-count">${s.parsed.blocks.length}</span>`:''}</span>` : '',
+      s.xlsxName ? `<span class="merge-file-chip">${jcEsc(s.xlsxName)}</span>` : ''
+    ].join('');
+
+    const msgs=[];
+    if(s.error) msgs.push(s.error);
+    if(s.parsed) msgs.push(...s.parsed.errors, ...s.parsed.warnings);
+    joistWarnings.innerHTML=msgs.map(w=>`<div>⚠ ${jcEsc(w)}</div>`).join('');
+    joistWarnings.style.display=msgs.length?'block':'none';
+
+    const blocked = !s.parsed || !s.xlsxBuf || s.parsed.errors.length>0;
+    joistDownload.classList.toggle('visible', !blocked);
+
+    if(!s.parsed && !s.xlsxBuf){ joistPreview.innerHTML='<span>No files loaded.</span>'; return; }
+    const parts=[];
+    if(s.parsed){
+      const p=s.parsed;
+      const kinds=p.blocks.reduce((a,b)=>(a[b.kind]=(a[b.kind]||0)+1,a),{});
+      parts.push(`<div><strong>${jcEsc(s.csvName)}</strong></div>`);
+      parts.push(`<div>${p.blocks.length} blocks — ${Object.entries(kinds).map(([k,n])=>`${n} ${jcEsc(k)}`).join(', ')}</div>`);
+      parts.push(`<div>${p.blocks.reduce((a,b)=>a+b.filled,0)} node labels, most in one block: ${p.blocks.reduce((a,b)=>Math.max(a,b.filled),0)} of ${JC_NODES}</div>`);
+    } else if(s.csvName){
+      parts.push(`<div>✕ ${jcEsc(s.csvName)} could not be read</div>`);
+    }
+    if(s.xlsxBuf) parts.push(`<div><strong>${jcEsc(s.xlsxName)}</strong> ready</div>`);
+    else parts.push('<div>Waiting for the JOIST LOADS .xlsx</div>');
+    if(!blocked) parts.push(`<div>→ <strong>${jcEsc(joistOutputName(s.xlsxName))}</strong></div>`);
+    if(s.parsed && s.parsed.errors.length) parts.push('<div>✕ Nothing written — fix the CSV above.</div>');
+    joistPreview.innerHTML=parts.join('');
+  }
+
+  joistDownload.addEventListener('click', async () => {
+    const s=joistState;
+    if(!s.parsed || !s.xlsxBuf || s.parsed.errors.length) return;
+    joistDownload.disabled=true;
+    const label=joistDownload.textContent;
+    joistDownload.textContent='Filling…';
+    try {
+      const r=await fillJoistWorkbook(s.xlsxBuf, s.parsed.blocks);
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([r.bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      a.download=joistOutputName(s.xlsxName);
+      a.click();
+      joistPreview.innerHTML+=`<div>✔ ${r.cellsWritten} cells written across ${r.sheetBlocks} blocks; `
+        + `${r.cleared} block${r.cleared===1?'':'s'} past the CSV had their node rows cleared.</div>`;
+      if(r.trailing.count){
+        joistWarnings.innerHTML+=`<div>⚠ ${r.trailing.count} block${r.trailing.count===1?'':'s'} after row ${r.trailing.afterRow} `
+          + `(first at row ${r.trailing.firstRow}) sit off the 13-row stride and were left untouched — `
+          + `they keep whatever the workbook already had.</div>`;
+        joistWarnings.style.display='block';
+      }
+    } catch(err){
+      joistWarnings.innerHTML=`<div>✕ ${jcEsc(err.message)}</div>`;
+      joistWarnings.style.display='block';
+    } finally {
+      joistDownload.disabled=false; joistDownload.textContent=label;
+    }
+  });
 </script>
 </body>
 </html>
