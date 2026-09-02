@@ -1038,7 +1038,7 @@
         <span class="step-badge">📐</span>
         <div>
           <div class="merge-title">Joist Checks → JOIST LOADS.xlsx</div>
-          <div class="merge-sub">Drop the <code>JOISTCHECK</code> CSV and the <code>JOIST LOADS</code> workbook. Fills the <strong>Joist checks</strong> sheet in place — the two-step “paste column A, then paste column B with Skip blanks” done for you, with every formula left alone.</div>
+          <div class="merge-sub">Drop the <code>JOISTCHECK</code> CSV and hit <strong>Fill Workbook</strong>. Fills the <strong>Joist checks</strong> sheet in place — the two-step “paste column A, then paste column B with Skip blanks” done for you, with every formula left alone. The workbook is remembered in this browser after you drop it once; it is never uploaded.</div>
         </div>
       </div>
 
@@ -1046,7 +1046,7 @@
         <input type="file" id="joist-input" accept=".csv,.xlsx" multiple>
         <div class="drop-icon">🧱</div>
         <div class="drop-label">Drop files here or <span>browse</span></div>
-        <div class="drop-hint">Accepted: .csv (the JOISTCHECK export) and .xlsx (the JOIST LOADS workbook)</div>
+        <div class="drop-hint">Accepted: .csv — the JOISTCHECK export. Drop the JOIST LOADS .xlsx once and this browser remembers it.</div>
       </div>
 
       <div class="merge-filelist" id="joist-filelist"></div>
@@ -1128,7 +1128,7 @@
 
   // Single source of truth for the revision badge. Bump this only; the header
   // pill is written from it at load, so the number can't drift or be reused.
-  const APP_REV = 48;
+  const APP_REV = 49;
 
   const R3D_HEADER = `[RISA-3D_INPUT_DATA]
 
@@ -4555,8 +4555,45 @@ Engineer
   }
   // === JOIST-CORE-END ===
 
+  // --- the remembered workbook ----------------------------------------------
+  //
+  // The panel is meant to take the JOISTCHECK CSV alone. Bundling JOIST LOADS
+  // into the page would do that, but this page is published to a PUBLIC repo
+  // and the workbook carries a SharePoint path, a real name, 5.7 MB of RISA
+  // project data and four hidden calc sheets. So the workbook is remembered in
+  // IndexedDB on the user's own machine instead: dropped once, then every later
+  // run is CSV-only. Nothing is uploaded and nothing is published.
+  //
+  // Deliberately outside JOIST-CORE: the core stays DOM- and storage-free so
+  // tools/joist-harness.mjs can run it in Node against a file from disk.
+
+  const JOIST_DB='r3d-joist-template', JOIST_STORE='template', JOIST_KEY='workbook';
+
+  function joistDb(){
+    return new Promise((res,rej)=>{
+      const rq=indexedDB.open(JOIST_DB,1);
+      rq.onupgradeneeded=()=>rq.result.createObjectStore(JOIST_STORE);
+      rq.onsuccess=()=>res(rq.result);
+      rq.onerror=()=>rej(rq.error);
+    });
+  }
+  function joistTx(mode, fn){
+    return joistDb().then(db=>new Promise((res,rej)=>{
+      const tx=db.transaction(JOIST_STORE,mode);
+      const out=fn(tx.objectStore(JOIST_STORE));
+      tx.oncomplete=()=>res(out && 'result' in out ? out.result : undefined);
+      tx.onerror=()=>rej(tx.error);
+    }));
+  }
+  // Every one of these swallows its failure: private windows and blocked
+  // storage throw, and the panel still works — it just asks for the workbook
+  // each time instead of remembering it.
+  const joistRemember = (name,bytes) => joistTx('readwrite', s=>s.put({name,bytes},JOIST_KEY)).catch(()=>null);
+  const joistRecall   = ()           => joistTx('readonly',  s=>s.get(JOIST_KEY)).catch(()=>null);
+  const joistForget   = ()           => joistTx('readwrite', s=>s.delete(JOIST_KEY)).catch(()=>null);
+
   // --- UI wiring -------------------------------------------------------------
-  const joistState = { csvName:'', xlsxName:'', parsed:null, xlsxBuf:null, error:'' };
+  const joistState = { csvName:'', xlsxName:'', parsed:null, xlsxBuf:null, error:'', remembered:false };
   const joistZone     = document.getElementById('joist-zone');
   const joistInput    = document.getElementById('joist-input');
   const joistPreview  = document.getElementById('joist-preview');
@@ -4584,7 +4621,14 @@ Engineer
       const ext=f.name.slice(f.name.lastIndexOf('.')+1).toLowerCase();
       try {
         if(ext==='csv'){ joistState.csvName=f.name; joistState.parsed=parseJoistCsv(await f.text()); }
-        else if(ext==='xlsx'){ joistState.xlsxName=f.name; joistState.xlsxBuf=await f.arrayBuffer(); }
+        else if(ext==='xlsx'){
+          joistState.xlsxName=f.name;
+          joistState.xlsxBuf=await f.arrayBuffer();
+          joistState.remembered=false;
+          // Stored as raw bytes on this machine only.
+          await joistRemember(f.name, joistState.xlsxBuf);
+          joistState.remembered=true;
+        }
         else joistState.error=`${f.name}: expected a .csv or an .xlsx`;
       } catch(err){
         if(ext==='csv'){ joistState.csvName=f.name; joistState.parsed=null; }
@@ -4598,7 +4642,9 @@ Engineer
     const s=joistState;
     joistList.innerHTML=[
       s.csvName  ? `<span class="merge-file-chip${s.parsed?'':' invalid'}">${s.parsed?'':'⚠ '}${jcEsc(s.csvName)}${s.parsed?` <span class="chip-count">${s.parsed.blocks.length}</span>`:''}</span>` : '',
-      s.xlsxName ? `<span class="merge-file-chip">${jcEsc(s.xlsxName)}</span>` : ''
+      s.xlsxName ? `<span class="merge-file-chip" title="${s.remembered?'Remembered in this browser — never uploaded':'Loaded for this session'}">`
+                 + `${s.remembered?'💾 ':''}${jcEsc(s.xlsxName)}`
+                 + `<button class="chip-remove" data-joist-forget="1" title="Forget this workbook">✕</button></span>` : ''
     ].join('');
 
     const msgs=[];
@@ -4626,8 +4672,8 @@ Engineer
     } else if(s.csvName){
       parts.push(`<div>✕ ${jcEsc(s.csvName)} could not be read</div>`);
     }
-    if(s.xlsxBuf) parts.push(`<div><strong>${jcEsc(s.xlsxName)}</strong> ready</div>`);
-    else parts.push('<div>Waiting for the JOIST LOADS .xlsx</div>');
+    if(s.xlsxBuf) parts.push(`<div><strong>${jcEsc(s.xlsxName)}</strong> ${s.remembered?'remembered in this browser':'ready'}</div>`);
+    else parts.push('<div>Drop the JOIST LOADS .xlsx once — it is remembered after that</div>');
     if(!blocked) parts.push(`<div>→ <strong>${jcEsc(joistOutputName(s.xlsxName))}</strong></div>`);
     if(s.parsed && s.parsed.errors.length) parts.push('<div>✕ Nothing written — fix the CSV above.</div>');
     joistPreview.innerHTML=parts.join('');
@@ -4659,6 +4705,21 @@ Engineer
     } finally {
       joistFill.disabled=false; joistFill.textContent=label;
     }
+  });
+
+  joistList.addEventListener('click', async e => {
+    const btn=e.target.closest('[data-joist-forget]');
+    if(!btn) return;
+    await joistForget();
+    joistState.xlsxName=''; joistState.xlsxBuf=null; joistState.remembered=false;
+    renderJoist();
+  });
+
+  // Restore the remembered workbook, if this browser has one.
+  joistRecall().then(rec => {
+    if(!rec || !rec.bytes || joistState.xlsxBuf) return;   // a drop this session wins
+    joistState.xlsxName=rec.name; joistState.xlsxBuf=rec.bytes; joistState.remembered=true;
+    renderJoist();
   });
 </script>
 </body>
